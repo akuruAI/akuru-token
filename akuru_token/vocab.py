@@ -2,7 +2,7 @@
 Vocab: stores token:id mappings and the ordered list of BPE merge rules.
 
 Built-in vocab files live in the `vocabs/` directory inside the package.
-The save() method allows writing new files into the vocabs/ directory, 
+The save() method allows writing new files into the vocabs/ directory,
 but will not overwrite an existing file there. Delete manually to overwrite.
 
 Usage examples
@@ -53,6 +53,8 @@ class Vocab:
         self._token_to_id: Dict[str, int] = {}
         self._id_to_token: Dict[int, str] = {}
         self.merges: List[Tuple[str, str]] = []  # ordered merge rules
+        self.pretokenizer_name: str = "GraphemePreTokenizer"
+        self.pretokenizer_attributes: Dict = {}
 
     def add_token(self, token: str) -> int:
         """Add a token if it doesn't exist; return its id."""
@@ -83,12 +85,17 @@ class Vocab:
     @property
     def unk_id(self) -> int:
         return self._token_to_id[self.SPECIAL_UNK]
-    
+
     def describe(self) -> None:
         """Print a human-readable summary of the vocabulary to stdout."""
         specials = [
             (tok, self._token_to_id[tok])
-            for tok in (self.SPECIAL_UNK, self.SPECIAL_PAD, self.SPECIAL_BOS, self.SPECIAL_EOS)
+            for tok in (
+                self.SPECIAL_UNK,
+                self.SPECIAL_PAD,
+                self.SPECIAL_BOS,
+                self.SPECIAL_EOS,
+            )
             if tok in self._token_to_id
         ]
         special_str = "  ".join(f"{tok}={idx}" for tok, idx in specials)
@@ -96,11 +103,14 @@ class Vocab:
         first_merges = [f"({a!r}, {b!r}) → {a+b!r}" for a, b in self.merges[:5]]
 
         print(repr(self))
+        print(f"  Pretokenizer   : {self.pretokenizer_name}")
         print(f"  Special tokens : {special_str or '(none)'}")
         print(f"  First 10 tokens: {', '.join(repr(t) for t in first_tokens)}")
         print(f"  First 5 merges : {', '.join(first_merges) or '(none)'}")
 
-    def tokens(self, start: int = 0, end: Optional[int] = None) -> List[Tuple[str, int]]:
+    def tokens(
+        self, start: int = 0, end: Optional[int] = None
+    ) -> List[Tuple[str, int]]:
         """
         Return a slice of the vocabulary as (token, id) pairs, ordered by id.
 
@@ -117,7 +127,6 @@ class Vocab:
             for i in range(start, end)
             if i in self._id_to_token
         ]
-
 
     @staticmethod
     def _resolve_load_path(name_or_path: str | Path) -> Path:
@@ -190,10 +199,16 @@ class Vocab:
         dest = self._resolve_save_path(name_or_path)
         dest.parent.mkdir(parents=True, exist_ok=True)
         data = {
+            "pretokenizer": {
+                "name": self.pretokenizer_name,
+                "attributes": self.pretokenizer_attributes,
+            },
             "vocab": self._token_to_id,
             "merges": self.merges,
         }
-        dest.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        dest.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     @classmethod
     def load(cls, name_or_path: str | Path = "sin_eng") -> "Vocab":
@@ -211,6 +226,11 @@ class Vocab:
         path = cls._resolve_load_path(name_or_path)
         data = json.loads(path.read_text(encoding="utf-8"))
         vocab = cls()
+
+        pt_block = data.get("pretokenizer", {})
+        vocab.pretokenizer_name = pt_block.get("name", "GraphemePreTokenizer")
+        vocab.pretokenizer_attributes = pt_block.get("attributes", {})
+
         for token, idx in data["vocab"].items():
             vocab._token_to_id[token] = idx
             vocab._id_to_token[idx] = token
