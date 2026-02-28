@@ -151,7 +151,6 @@ class GraphemePreTokenizer(BasePreTokenizer):
 
     def pre_tokenize(self, text: str) -> List[str]:
         parts = self._WHITESPACE.split(text)
-        print(parts)
         tokens = []
         for i, part in enumerate(parts):
             if not part:

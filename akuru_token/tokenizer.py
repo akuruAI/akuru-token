@@ -136,7 +136,7 @@ class BPETokenizer:
         if any("\u0120" in p for p in pieces):
             text = "".join(pieces).replace("\u0120", " ").strip()
         else:
-            text = " ".join(pieces)
+            text = "".join(pieces)
         return text
 
     def decode_batch(
