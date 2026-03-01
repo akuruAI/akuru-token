@@ -4,9 +4,9 @@ A grapheme-aware BPE tokenizer library with support for Sinhala script and mixed
 
 ## Why grapheme-aware?
 
-Most tokenizers split text into Unicode codepoints before applying BPE. In Sinhala, this shreds syllables: `කිරිබත්` becomes `['ක', 'ි', 'ර', 'ි', 'බ', 'ත', '්']` — seven atoms, none of which is a valid linguistic unit. akuru-token splits first into *grapheme clusters*, so the same word becomes `['කි', 'රි', 'බ', 'ත්']` — four syllabic units that a native reader would recognise as the base alphabet. BPE then learns higher-level patterns (syllables, morphemes, common word fragments) rather than spending merges reconstructing what should have been atomic from the start.
+Most tokenizers split text into Unicode codepoints before applying BPE. In Sinhala, this shreds syllables: `කිරිබත්` becomes `['ක', 'ි', 'ර', 'ි', 'බ', 'ත', '්']` - seven atoms, none of which is a valid linguistic unit. akuru-token splits first into *grapheme clusters*, so the same word becomes `['කි', 'රි', 'බ', 'ත්']` - four syllabic units that a native reader would recognise as the base alphabet. BPE then learns higher-level patterns (syllables, morphemes, common word fragments) rather than spending merges reconstructing what should have been atomic from the start.
 
-The current implementation focuses on Sinhala. In future versions we hope to extend support to other abugida scripts — such as Tamil, Devanagari, and Malayalam — where the same grapheme-cluster problem applies.
+The current implementation focuses on Sinhala. In future versions, we aim to extend support to other abugida scripts such as Tamil, Devanagari, and Malayalam, where the same grapheme-cluster problem applies.
 
 ## Installation
 
@@ -40,8 +40,8 @@ pip install akuru-token
 <!-- TODO: fill in once training is complete
 
 Training corpus:
-- Dataset 1 — description, size (e.g. Sinhala Wikipedia dump, ~X M tokens)
-- Dataset 2 — description, size
+- Dataset 1 - description, size (e.g. Sinhala Wikipedia dump, ~X M tokens)
+- Dataset 2 - description, size
 - ...
 
 Total: ~X M tokens
@@ -65,7 +65,7 @@ vocab.describe()
 | `GPT2PreTokenizer` | GPT-2 regex | Codepoints | English, Latin-script |
 | `WhitespacePreTokenizer` | Whitespace | Codepoints | Simple / reference use |
 
-The pre-tokenizer is recorded in the vocab JSON and resolved automatically on load — you never need to specify it manually.
+The pre-tokenizer is recorded in the vocab JSON and resolved automatically on load. You never need to specify it manually.
 
 ## Inference
 
@@ -130,7 +130,7 @@ Vocabularies are stored as JSON:
 }
 ```
 
-Saving to the package `vocabs/` directory is allowed for new files. Overwriting an existing file there is blocked — delete it manually first.
+Saving new files to the `vocabs/` directory is allowed. Overwriting an existing file is blocked. Delete it manually first to overwrite.
 
 ## Running tests
 
