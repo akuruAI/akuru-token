@@ -60,8 +60,9 @@ class TestGraphemeSegmentation:
         assert split_graphemes("ර්‍ම") == ["ර්‍ම"]
 
     def test_zwj_conjunct(self):
-        # ශ්‍ර is a conjunct formed with ZWJ — must be one cluster
-        assert split_graphemes("ශ්‍ර") == ["ශ්‍ර"]
+        # Conjuncts formed with ZWJ must be one cluster
+        # Tests rakaranshaya and yansaya
+        assert split_graphemes("ශ්‍රක්‍ය") == ["ශ්‍ර", "ක්‍ය"]
 
     def test_chained_zwj_conjunct(self):
         # Chained conjunct: k + virama + ZWJ + sh + virama + ZWJ + r
@@ -77,6 +78,10 @@ class TestGraphemeSegmentation:
     def test_mixed_script(self):
         result = split_graphemes("hi කි")
         assert result == ["h", "i", " ", "කි"]
+
+    def test_sinhala_digits(self):
+        result = split_graphemes("෧෨")
+        assert result == ["෧", "෨"]
 
     def test_empty_string(self):
         assert split_graphemes("") == []
@@ -223,7 +228,6 @@ class TestBPETrainer:
             t for t in merged_tokens if any("\u0d80" <= ch <= "\u0dff" for ch in t)
         ]
         assert len(sinhala_merges) > 0
-
 
 
 class TestBPETokenizer:
