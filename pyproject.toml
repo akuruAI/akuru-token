@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "akuru-token"
+version = "0.1.0"
+description = "A grapheme-aware BPE tokenizer library."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-cov"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["akuru_token*"]
+
+[tool.setuptools.package-data]
+akuru_token = ["vocabs/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
