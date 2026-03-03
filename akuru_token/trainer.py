@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter, defaultdict
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from .pretokenizer import BasePreTokenizer, DefaultPreTokenizer
 from .vocab import Vocab
@@ -80,17 +80,20 @@ class BPETrainer:
             num_merges,
         )
 
-        # word: list-of-symbols (to change during merges)
+        # word: list-of-symbols
         word_symbols: Dict[Word, List[str]] = {word: list(word) for word in word_freqs}
 
+        # Build pair_freqs and pair_to_words once. Updated incrementally each merge.
+        pair_freqs, pair_to_words = self._build_index(word_symbols, word_freqs)
+
         for merge_idx in range(num_merges):
-            pair_freqs = self._count_pairs(word_symbols, word_freqs)
             if not pair_freqs:
                 logger.info("No more pairs to merge at step %d.", merge_idx)
                 break
 
-            # TODO - see whether we can avoid iteration by getting the values from _count_pairs
-            best_pair, best_freq = max(pair_freqs.items(), key=lambda kv: kv[1])
+            best_pair, best_freq = max(
+                pair_freqs.items(), key=lambda kv: (kv[1], kv[0])
+            )
 
             if best_freq < self.min_frequency:
                 logger.info(
@@ -104,7 +107,9 @@ class BPETrainer:
             vocab.merges.append(best_pair)
             vocab.add_token(merged)
 
-            self._apply_merge(word_symbols, best_pair, merged)
+            self._apply_merge(
+                word_symbols, word_freqs, pair_freqs, pair_to_words, best_pair, merged
+            )
 
             if self.show_progress and (merge_idx + 1) % self.show_progress == 0:
                 logger.info(
@@ -150,30 +155,88 @@ class BPETrainer:
             vocab.add_token(sym)
         return vocab
 
-    @staticmethod
-    def _count_pairs(
+    def _build_index(
+        self,
         word_symbols: Dict[Word, List[str]],
         word_freqs: WordFreqs,
-    ) -> Dict[Pair, int]:
+    ) -> Tuple[Dict[Pair, int], Dict[Pair, Set[Word]]]:
+        """
+        Build pair_freqs and pair_to_words.
+
+        pair_freqs     : frequency of each adjacent pair.
+        pair_to_words  : set of words that contain each pair.
+
+        Both structures are maintained incrementally by _apply_merge.
+        """
         pair_freqs: Dict[Pair, int] = defaultdict(int)
+        pair_to_words: Dict[Pair, Set[Word]] = defaultdict(set)
+
         for word, symbols in word_symbols.items():
             freq = word_freqs[word]
             for a, b in zip(symbols, symbols[1:]):
                 pair_freqs[(a, b)] += freq
-        return pair_freqs
+                pair_to_words[(a, b)].add(word)
 
-    @staticmethod
+        return pair_freqs, pair_to_words
+
     def _apply_merge(
+        self,
         word_symbols: Dict[Word, List[str]],
+        word_freqs: WordFreqs,
+        pair_freqs: Dict[Pair, int],
+        pair_to_words: Dict[Pair, Set[Word]],
         pair: Pair,
         merged: str,
     ) -> None:
+        """
+        Apply one BPE merge and update pair_freqs / pair_to_words incrementally.
+
+        Only the words that actually contain *pair* are visited (via pair_to_words),
+        and only the neighbouring pairs that changed are updated in pair_freqs.
+        """
         a, b = pair
-        for symbols in word_symbols.values():
+        affected_words = list(pair_to_words.get(pair, set()))
+
+        for word in affected_words:
+            symbols = word_symbols[word]
+            freq = word_freqs[word]
             i = 0
             while i < len(symbols) - 1:
                 if symbols[i] == a and symbols[i + 1] == b:
+                    # remove broken left neighbour pair (x, a)
+                    if i > 0:
+                        left_pair = (symbols[i - 1], a)
+                        pair_freqs[left_pair] -= freq
+                        if pair_freqs[left_pair] <= 0:
+                            del pair_freqs[left_pair]
+                        pair_to_words[left_pair].discard(word)
+
+                    # remove broken right neighbour pair (b, y)
+                    if i + 2 < len(symbols):
+                        right_pair = (b, symbols[i + 2])
+                        pair_freqs[right_pair] -= freq
+                        if pair_freqs[right_pair] <= 0:
+                            del pair_freqs[right_pair]
+                        pair_to_words[right_pair].discard(word)
+
+                    # apply the merge
                     symbols[i] = merged
                     del symbols[i + 1]
+
+                    # add new left neighbour pair (x, merged)
+                    if i > 0:
+                        new_left = (symbols[i - 1], merged)
+                        pair_freqs[new_left] += freq
+                        pair_to_words[new_left].add(word)
+
+                    # add new right neighbour pair (merged, y)
+                    if i + 1 < len(symbols):
+                        new_right = (merged, symbols[i + 1])
+                        pair_freqs[new_right] += freq
+                        pair_to_words[new_right].add(word)
                 else:
                     i += 1
+
+        # The pair is merged such pair no longer exists
+        pair_freqs.pop(pair, None)
+        pair_to_words.pop(pair, None)
