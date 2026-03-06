@@ -65,13 +65,30 @@ def split_graphemes(text: str) -> List[str]:
 
 
 class BasePreTokenizer(ABC):
+    """
+    Parameters
+    ----------
+    normalize:
+        If True (default), apply Unicode NFC normalization to the input text.
+        This ensures consistent vocab keys. The flag is persisted in the vocab
+        JSON so training and inference always agree.
+    """
+
+    def __init__(self, normalize: bool = True) -> None:
+        self.normalize = normalize
+
+    def _normalize(self, text: str) -> str:
+        """Return NFC-normalized text when ``self.normalize`` is True."""
+        return unicodedata.normalize("NFC", text) if self.normalize else text
+
     @abstractmethod
     def pre_tokenize(self, text: str) -> List[str]:
         """
-        Split *text* into word-level chunks.
+        Split text into word-level chunks.
 
         Each returned string is a word - BPE will not merge across word
-        boundaries.
+        boundaries. Implementations must call ``self._normalize(text)``
+        as their first step.
         """
 
     def word_to_symbols(self, word: str) -> List[str]:
@@ -87,8 +104,11 @@ class BasePreTokenizer(ABC):
 class WhitespacePreTokenizer(BasePreTokenizer):
     """Splits on whitespace; codepoint-level symbols."""
 
+    def __init__(self, normalize: bool = True) -> None:
+        super().__init__(normalize=normalize)
+
     def pre_tokenize(self, text: str) -> List[str]:
-        return text.split()
+        return self._normalize(text).split()
 
 
 class GPT2PreTokenizer(BasePreTokenizer):
@@ -104,9 +124,12 @@ class GPT2PreTokenizer(BasePreTokenizer):
         re.UNICODE,
     )
 
+    def __init__(self, normalize: bool = True) -> None:
+        super().__init__(normalize=normalize)
+
     def pre_tokenize(self, text: str) -> List[str]:
         tokens = []
-        for match in self._PATTERN.finditer(text):
+        for match in self._PATTERN.finditer(self._normalize(text)):
             word = match.group()
             if word.startswith(" "):
                 word = "\u0120" + word[1:]
@@ -149,8 +172,11 @@ class GraphemePreTokenizer(BasePreTokenizer):
 
     _WHITESPACE = re.compile(r" +")
 
+    def __init__(self, normalize: bool = True) -> None:
+        super().__init__(normalize=normalize)
+
     def pre_tokenize(self, text: str) -> List[str]:
-        parts = self._WHITESPACE.split(text)
+        parts = self._WHITESPACE.split(self._normalize(text))
         tokens = []
         for i, part in enumerate(parts):
             if not part:

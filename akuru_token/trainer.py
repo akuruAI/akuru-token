@@ -64,6 +64,7 @@ class BPETrainer:
 
         vocab = self._initialize_vocab(word_freqs)
         vocab.pretokenizer_name = type(self.pre_tokenizer).__name__
+        vocab.pretokenizer_attributes = {"normalize": self.pre_tokenizer.normalize}
         num_merges = self.vocab_size - len(vocab)
 
         if num_merges <= 0:
@@ -240,3 +241,4 @@ class BPETrainer:
         # The pair is merged such pair no longer exists
         pair_freqs.pop(pair, None)
         pair_to_words.pop(pair, None)
+        

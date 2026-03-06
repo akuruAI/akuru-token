@@ -152,7 +152,8 @@ akuru_token/
 └── vocabs/
     └── sin_eng.json
 tests/
-└── test_tokenizer.py
+├── test_tokenizer.py
+└── test_trainer.py
 ```
 
 ## Citation

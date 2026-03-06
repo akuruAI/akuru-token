@@ -8,6 +8,8 @@ import pytest
 from akuru_token import BPETokenizer, BPETrainer, Vocab
 from akuru_token.pretokenizer import (
     GraphemePreTokenizer,
+    GPT2PreTokenizer,
+    WhitespacePreTokenizer,
     split_graphemes,
 )
 
@@ -33,7 +35,7 @@ def grapheme_vocab():
     trainer = BPETrainer(
         vocab_size=300,
         min_frequency=1,
-        pre_tokenizer=GraphemePreTokenizer(),
+        pre_tokenizer=GraphemePreTokenizer(normalize=False),
         show_progress=0,
     )
     return trainer.train(MIXED_CORPUS)
@@ -122,6 +124,106 @@ class TestGraphemePreTokenizer:
         assert any("\u0120" in w for w in words[1:])
 
 
+class TestNFCNormalization:
+    """
+    Tests for Unicode NFC normalization in pre-tokenizers.
+
+    NFD input (decomposed) must produce identical tokens/ids to NFC input
+    (precomposed). The flag must round-trip through the vocab JSON so
+    training and inference always agree.
+    """
+
+    # é as a single precomposed codepoint (NFC, U+00E9)
+    NFC_TEXT = "caf\u00e9 ශ්‍රී"
+    # é as base e + combining acute (NFD, U+0065 + U+0301)
+    NFD_TEXT = "cafe\u0301 ශ්‍රී"
+
+    def test_nfc_and_nfd_same_words_grapheme(self):
+        pt = GraphemePreTokenizer(normalize=True)
+        assert pt.pre_tokenize(self.NFC_TEXT) == pt.pre_tokenize(self.NFD_TEXT)
+
+    def test_nfc_and_nfd_same_words_gpt2(self):
+        pt = GPT2PreTokenizer(normalize=True)
+        assert pt.pre_tokenize(self.NFC_TEXT) == pt.pre_tokenize(self.NFD_TEXT)
+
+    def test_nfc_and_nfd_same_words_whitespace(self):
+        pt = WhitespacePreTokenizer(normalize=True)
+        assert pt.pre_tokenize(self.NFC_TEXT) == pt.pre_tokenize(self.NFD_TEXT)
+
+    def test_normalize_false_preserves_nfd(self):
+        # With normalize=False the NFD combining acute stays as a separate codepoint,
+        # so the two inputs must produce different results.
+        pt = GraphemePreTokenizer(normalize=False)
+        assert pt.pre_tokenize(self.NFC_TEXT) != pt.pre_tokenize(self.NFD_TEXT)
+
+    def test_normalize_default_is_true(self):
+        assert GraphemePreTokenizer().normalize is True
+        assert GPT2PreTokenizer().normalize is True
+        assert WhitespacePreTokenizer().normalize is True
+
+    def test_normalize_persisted_in_vocab(self):
+        trainer = BPETrainer(
+            vocab_size=200,
+            min_frequency=1,
+            pre_tokenizer=GraphemePreTokenizer(normalize=True),
+            show_progress=0,
+        )
+        vocab = trainer.train(["caf\u00e9 ශ්‍රී ලංකාව"])
+        assert vocab.pretokenizer_attributes["normalize"] is True
+
+    def test_normalize_false_persisted_in_vocab(self):
+        trainer = BPETrainer(
+            vocab_size=200,
+            min_frequency=1,
+            pre_tokenizer=GraphemePreTokenizer(normalize=False),
+            show_progress=0,
+        )
+        vocab = trainer.train(["caf\u00e9 ශ්‍රී ලංකාව"])
+        assert vocab.pretokenizer_attributes["normalize"] is False
+
+    def test_normalize_roundtrips_via_json(self, tmp_path):
+        trainer = BPETrainer(
+            vocab_size=200,
+            min_frequency=1,
+            pre_tokenizer=GraphemePreTokenizer(normalize=False),
+            show_progress=0,
+        )
+        vocab = trainer.train(["hello world"])
+        p = tmp_path / "vocab.json"
+        vocab.save(p)
+        loaded = Vocab.load(p)
+        assert loaded.pretokenizer_attributes["normalize"] is False
+
+    def test_resolved_pretokenizer_inherits_normalize(self, tmp_path):
+        # After save/load the resolved pre-tokenizer must carry the correct flag.
+        trainer = BPETrainer(
+            vocab_size=200,
+            min_frequency=1,
+            pre_tokenizer=GraphemePreTokenizer(normalize=False),
+            show_progress=0,
+        )
+        vocab = trainer.train(["hello world"])
+        p = tmp_path / "vocab.json"
+        vocab.save(p)
+        tok = BPETokenizer.from_file(p)
+        assert tok.pre_tokenizer.normalize is False
+
+    def test_nfd_input_encodes_same_ids_as_nfc(self):
+        # End-to-end: train on NFC, encode NFD — must produce identical ids.
+        corpus = ["caf\u00e9 au lait", "caf\u00e9 noir"]
+        trainer = BPETrainer(
+            vocab_size=200,
+            min_frequency=1,
+            pre_tokenizer=GraphemePreTokenizer(normalize=True),
+            show_progress=0,
+        )
+        vocab = trainer.train(corpus)
+        tok = BPETokenizer(vocab)
+        nfc_ids = tok.encode("caf\u00e9 au lait")
+        nfd_ids = tok.encode("cafe\u0301 au lait")
+        assert nfc_ids == nfd_ids
+
+
 class TestVocab:
 
     def test_add_and_lookup(self):
@@ -146,7 +248,7 @@ class TestVocab:
         assert grapheme_vocab.pretokenizer_name == "GraphemePreTokenizer"
 
     def test_pretokenizer_attributes_empty(self, grapheme_vocab):
-        assert grapheme_vocab.pretokenizer_attributes == {}
+        assert grapheme_vocab.pretokenizer_attributes == {"normalize": False}
 
     def test_repr(self, grapheme_vocab):
         r = repr(grapheme_vocab)
@@ -306,3 +408,4 @@ class TestBPETokenizer:
         v.pretokenizer_name = "DoesNotExist"
         with pytest.raises(ValueError, match="Unknown pretokenizer"):
             BPETokenizer(v)
+            

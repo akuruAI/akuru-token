@@ -25,14 +25,14 @@ _PRETOKENIZER_REGISTRY: Dict[str, Type[BasePreTokenizer]] = {
 
 
 def _resolve_pretokenizer(vocab: Vocab) -> BasePreTokenizer:
-    """Instantiate the pre-tokenizer recorded in *vocab*."""
+    """Instantiate the pre-tokenizer recorded in *vocab*, including its attributes."""
     name = vocab.pretokenizer_name
     cls = _PRETOKENIZER_REGISTRY.get(name)
     if cls is None:
         raise ValueError(
             f"Unknown pretokenizer {name!r}. " f"Known: {list(_PRETOKENIZER_REGISTRY)}."
         )
-    return cls()
+    return cls(**vocab.pretokenizer_attributes)
 
 
 class BPETokenizer:
@@ -189,3 +189,4 @@ class BPETokenizer:
             symbols = symbols[:best_idx] + [merged] + symbols[best_idx + 2 :]
 
         return symbols
+    
