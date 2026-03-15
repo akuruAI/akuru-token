@@ -106,6 +106,10 @@ def _is_sinhala(cp: int) -> bool:
     return 0x0D80 <= cp <= 0x0DFF or cp == _ZWJ
 
 
+_YANSAYA_CONS = 0x0DBA  # ය
+_RAKAARAANSAYA_CONS = 0x0DBB  # ර
+
+
 def _parse_consonant_cluster(cps: list[int], i: int, n: int) -> tuple[int, bool]:
     """
     Parse a consonant cluster in the standard conjunct encoding:
@@ -130,7 +134,10 @@ def _parse_consonant_cluster(cps: list[int], i: int, n: int) -> tuple[int, bool]
             return i, False
         i += 1
 
-    # Zero or more conjuncts (් + ZWJ + cons) (§5.8, 5.10)
+    # Zero or more conjuncts (් + ZWJ + cons) (§5.8, 5.10).
+    # Yansaya and rakaaraansaya may appear at most once and
+    # only as the final consonant in the chain.
+    prev_conjunct_is_terminal = False
     while True:
         if (
             i + 2 < n
@@ -138,7 +145,17 @@ def _parse_consonant_cluster(cps: list[int], i: int, n: int) -> tuple[int, bool]
             and cps[i + 1] == _ZWJ
             and _is_consonant(cps[i + 2])
         ):
+            # If prev conjunct was ය/ර, no further conjunct is allowed.
+            if prev_conjunct_is_terminal:
+                return i, False
+
+            consumed_cons = cps[i + 2]
             i += 3
+
+            if consumed_cons in (_YANSAYA_CONS, _RAKAARAANSAYA_CONS):
+                prev_conjunct_is_terminal = True
+            else:
+                prev_conjunct_is_terminal = False
         else:
             break
 
@@ -271,7 +288,21 @@ def find_invalid(text: str) -> Optional[int]:
             i, ok = _parse_consonant_cluster(cps, i, n)
             if not ok:
                 return i
+
+            # Lookback: detect conjunct yansaya/rakaaraansaya by checking the
+            # last 3 codepoints.a bare ් tail is illegal afterwards and only
+            # vowel signs are permitted.
+            ends_with_ya_ra = (
+                i >= 3
+                and cps[i - 3] == _AL_LAKUNA
+                and cps[i - 2] == _ZWJ
+                and cps[i - 1] in (_YANSAYA_CONS, _RAKAARAANSAYA_CONS)
+            )
+
             i, ok, is_pure = _parse_tail_mark(cps, i, n)
+
+            if ok and is_pure and ends_with_ya_ra:
+                return i - 1  # ් after yansaya/rakaaraansaya is invalid (Tables 2–3).
             if not ok:
                 return i
             if is_pure and i < n and cps[i] in (_ANUSVARAYA, _VISARGAYA):
