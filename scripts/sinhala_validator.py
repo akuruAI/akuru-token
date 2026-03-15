@@ -46,7 +46,7 @@ _SINGLE_VOWEL_SIGNS = frozenset(
         0x0DD6,  # ූ
         0x0DD8,  # ෘ  (may double for ෲ)
         0x0DDF,  # ෟ
-        0x0DF2,  # ෲ  (precomposed diga gaetta)
+        0x0DF2,  # ෲ  (precomposed diga gaetta-pilla)
         0x0DF3,  # ෳ
         0x0DDB,  # ෛ  (precomposed kombu deka)
         0x0DDA,  # ේ  (precomposed diga kombuva)
@@ -112,7 +112,7 @@ def _is_sinhala(cp: int) -> bool:
 
 def _parse_consonant_cluster(
     cps: list[int], i: int, n: int, allow_touching: bool = False
-) -> int:
+) -> tuple[int, bool]:
     """
     Parse a consonant cluster in one of two encodings:
 
@@ -122,7 +122,7 @@ def _parse_consonant_cluster(
     Touching letters (§5.11, only when allow_touching=True):
         base_consonant [ ZWJ + ් + consonant ]
 
-    Returns new_i on success, or -error_i on failure.
+    Returns (new_i, is_valid).
     """
 
     # Consume repaya prefix: ර + ් + ZWJ + <base consonant>  (§5.9)
@@ -136,7 +136,7 @@ def _parse_consonant_cluster(
         i += 4
     else:
         if i >= n or not _is_consonant(cps[i]):
-            return -i, 0
+            return i, False
         i += 1
 
     # Zero or more extensions - two legal forms:
@@ -161,7 +161,7 @@ def _parse_consonant_cluster(
         else:
             break
 
-    return i
+    return i, True
 
 
 def _parse_tail_mark(
@@ -177,24 +177,28 @@ def _parse_tail_mark(
     meaning the cluster is a pure consonant and may not be followed by a
     semi-consonant (SLS 1134:2011 §3.3, §3.5).
     """
-    # print("tails mark", cps[i], chr(int(cps[i])))
     if i >= n:
         return i, True, False
+
     cp = cps[i]
+
     # Semi-consonants are not tail marks - leave for _parse_semi_consonant
     if cp in (_ANUSVARAYA, _VISARGAYA):
         return i, True, False
+
     # ZWJ here is invalid (stray joiner after a complete cluster)
     if cp == _ZWJ:
         return i, False, False
-    # Trailing kombuva (0DD9) is valid after a consonant in storage order (§5.4,
-    # §5.8).  e.g. ෙක = 0D9A 0DD9, rakaaraansaya+kombuva = C+්+ZWJ+ར+0DD9.
+
+    # Trailing kombuva (0DD9) is valid after a consonant in storage order.
+    # e.g. කෙ = 0D9A 0DD9, rakaaraansaya+kombuva = C + ් + ZWJ + ර + 0DD9.
     # It is rejected as a *cluster-starter* (via _ALL_MARKS) but consumed here
     # when it legitimately trails its consonant.
     if cp == _KOMBUVA:
         i += 1
         return i, True, False
-    if cp not in (_ALL_MARKS | {_AL_LAKUNA}):
+
+    if cp not in (_ALL_MARKS):
         return i, True, False
 
     if cp in _SINGLE_VOWEL_SIGNS:
@@ -220,7 +224,7 @@ def _parse_semi_consonant(cps: list[int], i: int, n: int) -> tuple[int, bool]:
     if i < n and cps[i] in (_ANUSVARAYA, _VISARGAYA):
         i += 1
     # After semi-consonant, no more marks allowed
-    if i < n and (cps[i] in _ALL_MARKS or cps[i] == _ZWJ or cps[i] == _KOMBUVA):
+    if i < n and (cps[i] in _ALL_MARKS or cps[i] == _ZWJ):
         return i, False
     return i, True
 
@@ -273,8 +277,11 @@ def find_invalid(text: str, allow_touching: bool = False) -> Optional[int]:
                 if mark_cp not in allowed:
                     return i
                 i += 1
-                # no second mark after vowel mark
-                if i < n and (cps[i] in _ALL_MARKS or cps[i] == _ZWJ):
+                # no second mark after vowel mark except semi consonant
+                if i < n and (
+                    (cps[i] in _ALL_MARKS and cps[i] not in (_ANUSVARAYA, _VISARGAYA))
+                    or cps[i] == _ZWJ
+                ):
                     return i
             # semi-consonant
             i, ok = _parse_semi_consonant(cps, i, n)
@@ -284,9 +291,9 @@ def find_invalid(text: str, allow_touching: bool = False) -> Optional[int]:
 
         #  Consonant cluster
         if _is_consonant(cp):
-            i = _parse_consonant_cluster(cps, i, n, allow_touching)
-            if i < 0:
-                return -i
+            i, ok = _parse_consonant_cluster(cps, i, n, allow_touching)
+            if not ok:
+                return i
             i, ok, is_pure = _parse_tail_mark(cps, i, n)
             if not ok:
                 return i
