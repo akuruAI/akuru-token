@@ -6,15 +6,11 @@ Returns the index of the first invalid codepoint, or None if valid.
 
 Public API
 ----------
-find_invalid(text, allow_touching=False)
+find_invalid(text)
     Return the index of the first invalid codepoint, or None if the text
-    is fully valid.  Set allow_touching=True to permit the classical/
-    Buddhist "touching letters" encoding (§5.11): cons + ZWJ + ් + cons.
-    By default touching sequences are rejected because they are not used
-    in contemporary Sinhala and their visual appearance is identical to
-    normal conjuncts, making silent acceptance a source of confusion.
+    is fully valid.
 
-line_has_invalid_clusters(line, allow_touching=False)
+line_has_invalid_clusters(line)
     Convenience wrapper; returns True when find_invalid() is not None.
 """
 
@@ -110,17 +106,12 @@ def _is_sinhala(cp: int) -> bool:
     return 0x0D80 <= cp <= 0x0DFF or cp == _ZWJ
 
 
-def _parse_consonant_cluster(
-    cps: list[int], i: int, n: int, allow_touching: bool = False
-) -> tuple[int, bool]:
+def _parse_consonant_cluster(cps: list[int], i: int, n: int) -> tuple[int, bool]:
     """
-    Parse a consonant cluster in one of two encodings:
+    Parse a consonant cluster in the standard conjunct encoding:
 
     Conjunct (§5.8–5.10) — repaya, yansaya, rakaaraansaya, and other bandi forms:
         [ ර + ් + ZWJ ] base_consonant [ ් + ZWJ + consonant ]
-
-    Touching letters (§5.11, only when allow_touching=True):
-        base_consonant [ ZWJ + ් + consonant ]
 
     Returns (new_i, is_valid).
     """
@@ -139,22 +130,12 @@ def _parse_consonant_cluster(
             return i, False
         i += 1
 
-    # Zero or more extensions - two legal forms:
-    #   conjunct : ් + ZWJ + cons  (§5.8, 5.10)
-    #   touching : ZWJ + ් + cons  (§5.11, only when allow_touching=True)
+    # Zero or more conjuncts (් + ZWJ + cons) (§5.8, 5.10)
     while True:
         if (
             i + 2 < n
             and cps[i] == _AL_LAKUNA
             and cps[i + 1] == _ZWJ
-            and _is_consonant(cps[i + 2])
-        ):
-            i += 3
-        elif (
-            allow_touching
-            and i + 2 < n
-            and cps[i] == _ZWJ
-            and cps[i + 1] == _AL_LAKUNA
             and _is_consonant(cps[i + 2])
         ):
             i += 3
@@ -229,7 +210,7 @@ def _parse_semi_consonant(cps: list[int], i: int, n: int) -> tuple[int, bool]:
     return i, True
 
 
-def find_invalid(text: str, allow_touching: bool = False) -> Optional[int]:
+def find_invalid(text: str) -> Optional[int]:
     """
     Return index of first invalid codepoint, or None if text is valid.
 
@@ -237,10 +218,6 @@ def find_invalid(text: str, allow_touching: bool = False) -> Optional[int]:
     ----------
     text:
         The string to validate.
-    allow_touching:
-        If True, the classical "touching letters" encoding defined in §5.11
-        (cons + ZWJ + ් + cons) is accepted.  Defaults to False because
-        touching sequences are not used in contemporary Sinhala text.
     """
     cps = [ord(ch) for ch in text]
     i = 0
@@ -291,7 +268,7 @@ def find_invalid(text: str, allow_touching: bool = False) -> Optional[int]:
 
         #  Consonant cluster
         if _is_consonant(cp):
-            i, ok = _parse_consonant_cluster(cps, i, n, allow_touching)
+            i, ok = _parse_consonant_cluster(cps, i, n)
             if not ok:
                 return i
             i, ok, is_pure = _parse_tail_mark(cps, i, n)
@@ -316,5 +293,10 @@ def find_invalid(text: str, allow_touching: bool = False) -> Optional[int]:
         return i
 
 
-def line_has_invalid_clusters(line: str, allow_touching: bool = False) -> bool:
-    return find_invalid(line, allow_touching=allow_touching) is not None
+def line_has_invalid_clusters(line: str) -> bool:
+    return find_invalid(line) is not None
+
+
+# Use the following as a sanity check
+# print(find_invalid("අආඇඈඉඊඋඌඍඎඏඐඑඒඓඔඕඖ අාඅැඅෑඋෟඍෘඑ්ඔ්ඔෟ අංඅඃඅාං කකාකැකෑකිකීකුකූකෘකෘෘකෲකෟකෳකෙකේකෛකොකෝකෞ ක්ට් කාංකාඃකං ක්‍රක්‍රාක්‍රෙක්‍රේ ක්‍යක්‍යාක්‍යෙ ර්‍මර්‍මාර්‍ය්‍යකාර්‍ය්‍ය න්‍දක්‍ෂක්‍ෂ්‍රශ්‍රී ෦෧෨෩෪෫෬෭෮෯ ෴"))
+# print(find_invalid("ස‍්සඤ‍්ඤ‍්ඤ")) # touching characters with invalid two-touch cluster. Both should be invalid in this implementation
