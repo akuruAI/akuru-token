@@ -10,59 +10,91 @@ pre-tokenizers
 --------------
 WhitespacePreTokenizer   Simple whitespace split; codepoint symbols.
 GPT2PreTokenizer         GPT-2 regex split; codepoint symbols.
-GraphemePreTokenizer      Whitespace split; grapheme cluster symbols.
+GraphemePreTokenizer     Whitespace split; grapheme cluster symbols.
                          Handles Sinhala + English mixed text correctly.
+
+Grapheme segmentation
+---------------------
+UAX #29 (via ugrapheme) is used as the base segmentation algorithm.
+Sinhala ZWJ conjuncts are not covered by UAX #29 default rules - the spec
+deliberately excludes them. A post-processing step re-joins clusters that
+form valid Sinhala conjuncts:
+
+    consonant + ් (virama, U+0DCA) + ZWJ (U+200D) + consonant
+
+This covers rakaransaya (‍ර), yansaya (‍ය), repaya (ර්‍), and chained
+conjuncts. No other ZWJ sequences are re-joined - malformed sequences from
+noisy web text (ZWJ after vowel signs, multiple ZWJs, ZWJ + punctuation)
+are correctly left split by UAX #29.
+
+Note: This implementation does not support touching letters
 """
 
 from __future__ import annotations
 
-import re
 import unicodedata
 from abc import ABC, abstractmethod
 from typing import List
+
+import regex
+
+
+def _is_sinhala_consonant(ch: str) -> bool:
+    return "\u0d9a" <= ch <= "\u0dc6"
 
 
 def split_graphemes(text: str) -> List[str]:
     """
     Split *text* into a list of Unicode extended grapheme clusters.
 
-    Rules applied (sufficient for Sinhala + Latin scripts):
-      - Combining marks (Mn, Mc, Me) are attached to the preceding base char.
-      - A Zero Width Joiner (U+200D) and the character following it are absorbed
-        into the current cluster, forming conjunct consonants (e.g. ශ්‍ර).
+    Uses regex ``\\X`` (UAX #29) as the base, then re-joins Sinhala ZWJ conjunct
+    sequences that UAX #29 splits but Sinhala rendering requires to be atomic:
 
-    For scripts beyond Sinhala/Latin the full UAX #29 algorithm would be needed,
-    but this covers all practical cases in the target domain.
+        consonant + ් + ZWJ + consonant  (rakaransaya, yansaya, repaya, etc.)
+
+    Malformed sequences from noisy web text are intentionally left split:
+        - ZWJ after a vowel sign  (e.g. රා + ZWJ + ම)
+        - Multiple consecutive ZWJs
+        - ZWJ followed by punctuation or non-Sinhala characters
+    Note: This function does not support touching letters
     """
-    graphemes: List[str] = []
-    current = ""
+    clusters: List[str] = regex.findall(r'\X', text)
+    print(clusters)
+    return _rejoin_sinhala_conjuncts(clusters)
+
+
+def _rejoin_sinhala_conjuncts(clusters: List[str]) -> List[str]:
+    """
+    Re-join adjacent clusters that form a valid Sinhala ZWJ conjunct.
+
+    A cluster qualifies for re-joining when:
+      - It ends with Al lakuna + ZWJ  (U+0DCA + U+200D)
+      - The following cluster starts with a Sinhala consonant (U+0D9A-U+0DC6)
+
+    This is applied repeatedly so chained conjuncts like ක්‍ෂ්‍ර merge fully.
+    """
+    if not clusters:
+        return clusters
+
+    result: List[str] = []
     i = 0
-    while i < len(text):
-        ch = text[i]
-        cat = unicodedata.category(ch)
-
-        if not current:
-            current = ch
-        elif ch == "\u200d":
-            # Zero Width Joiner: pull it and the next char into the current cluster
-            current += ch
-            if i + 1 < len(text):
-                i += 1
-                current += text[i]
-        elif cat in ("Mn", "Mc", "Me"):
-            # Combining mark: attach to current cluster
-            current += ch
-        else:
-            graphemes.append(current)
-            current = ch
-
+    while i < len(clusters):
+        current = clusters[i]
+        # Check if current cluster ends with virama + ZWJ
+        while (
+            i + 1 < len(clusters)
+            and current.endswith("\u0dca\u200d")
+            and _is_sinhala_consonant(clusters[i + 1][0])
+        ):
+            i += 1
+            current += clusters[i]
+        result.append(current)
         i += 1
 
-    if current:
-        graphemes.append(current)
+    return result
 
-    return graphemes
-
+print(split_graphemes(" කාර්‍ය්‍ය ක්‍ෂ්‍ර ඤ‍්ඤ‍්ඤ"))
+print(split_graphemes("ඤ‍්ඤ‍්"))
 
 class BasePreTokenizer(ABC):
     """
@@ -119,9 +151,9 @@ class GPT2PreTokenizer(BasePreTokenizer):
     Leading space is encoded as Ġ (U+0120) so the model is space-aware.
     """
 
-    _PATTERN = re.compile(
+    _PATTERN = regex.compile(
         r"""'s|'t|'re|'ve|'m|'ll|'d| ?\w+| ?\d+| ?[^\s\w\d]+|\s+(?!\S)|\s+""",
-        re.UNICODE,
+        regex.UNICODE,
     )
 
     def __init__(self, normalize: bool = True) -> None:
@@ -170,7 +202,7 @@ class GraphemePreTokenizer(BasePreTokenizer):
     from raw codepoints.
     """
 
-    _WHITESPACE = re.compile(r" +")
+    _WHITESPACE = regex.compile(r" +")
 
     def __init__(self, normalize: bool = True) -> None:
         super().__init__(normalize=normalize)
@@ -181,7 +213,6 @@ class GraphemePreTokenizer(BasePreTokenizer):
         for i, part in enumerate(parts):
             if not part:
                 continue
-            # Prepend Ġ to mark inter-word spaces
             tokens.append(("\u0120" + part) if i > 0 else part)
         return tokens
 
