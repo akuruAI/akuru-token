@@ -59,7 +59,6 @@ def split_graphemes(text: str) -> List[str]:
     Note: This function does not support touching letters
     """
     clusters: List[str] = regex.findall(r'\X', text)
-    print(clusters)
     return _rejoin_sinhala_conjuncts(clusters)
 
 
@@ -92,9 +91,6 @@ def _rejoin_sinhala_conjuncts(clusters: List[str]) -> List[str]:
         i += 1
 
     return result
-
-print(split_graphemes(" කාර්‍ය්‍ය ක්‍ෂ්‍ර ඤ‍්ඤ‍්ඤ"))
-print(split_graphemes("ඤ‍්ඤ‍්"))
 
 class BasePreTokenizer(ABC):
     """

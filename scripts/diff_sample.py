@@ -65,8 +65,10 @@ def build_samples(
             invalid_idx = find_invalid(fixed)
             if invalid_idx is not None:
                 before_lines.append(line)
+                start = max(0, invalid_idx-6)
+                end = min(len(fixed), invalid_idx+6)
                 after_lines.append(
-                    f"[DROPPED — invalid Sinhala syntax at {invalid_idx} ({line[invalid_idx]})]"
+                    f"[DROPPED — invalid Sinhala syntax at {invalid_idx} after fixing. Error is around ({fixed[start:end]})]"
                 )
                 stats["dropped"] += 1
                 continue
@@ -99,7 +101,7 @@ def build_samples(
                 stats["changed"] += 1
             else:
                 stats["kept"] += 1
-
+    print(before_lines, after_lines, stats)
     return before_lines, after_lines, stats
 
 
@@ -170,6 +172,7 @@ def main() -> None:
         tofile="after (cleaned)",
         lineterm="",
     )
+    print(diff)
 
     out_path.write_text("\n".join(diff), encoding="utf-8")
 

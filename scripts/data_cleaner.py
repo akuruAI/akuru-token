@@ -165,7 +165,7 @@ def clean_file(in_path: Path, out_path: Path, min_length: int) -> dict:
                 
                 # 3. Syntax filter
                 invalid_idx = find_invalid(line)
-                if invalid_idx:
+                if invalid_idx is not None:
                     stats["dropped_syntax"] += 1
                     continue
 
