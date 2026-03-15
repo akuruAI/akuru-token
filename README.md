@@ -2,11 +2,30 @@
 
 A grapheme-aware BPE tokenizer library with support for Sinhala script and mixed Sinhala–English text.
 
-## Why grapheme-aware?
+## About
+
+akuru-token is a small, focused tokenizer library for Sinhala and mixed Sinhala–English text. It prioritizes grapheme clusters over raw codepoints so the base units match how Sinhala is read and written.
+
+### Why grapheme-aware?
 
 Most tokenizers split text into Unicode codepoints before applying BPE. In Sinhala, this shreds syllables: `කිරිබත්` becomes `['ක', 'ි', 'ර', 'ි', 'බ', 'ත', '්']` - seven atoms, none of which is a valid linguistic unit. akuru-token splits first into *grapheme clusters*, so the same word becomes `['කි', 'රි', 'බ', 'ත්']` - four syllabic units that a native reader would recognise as the base alphabet. BPE then learns higher-level patterns (syllables, morphemes, common word fragments) rather than spending merges reconstructing what should have been atomic from the start.
 
 The current implementation focuses on Sinhala. In future versions, we aim to extend support to other abugida scripts such as Tamil, Devanagari, and Malayalam, where the same grapheme-cluster problem applies.
+
+**Note: Sinhala touching letters are not supported yet**.
+
+### Citation
+
+If you use akuru-token in your research, please cite:
+
+```bibtex
+@software{akuru_token,
+  author  = {Ayantha Randika},
+  title   = {akuru-token: A Grapheme-Aware BPE Tokenizer},
+  year    = {2025},
+  url     = {https://github.com/akuruAI/akuru-token},
+}
+```
 
 ## Installation
 
@@ -151,20 +170,21 @@ akuru_token/
 ├── vocab.py          # Vocab
 └── vocabs/
     └── sin_eng.json
-tests/
+scripts/
+├── data_cleaner.py
+├── data_downloader.py
+├── diff_sample.py
+├── sinhala_validator.py
+└── sin_eng_trainer.py
+test/
 ├── test_tokenizer.py
 └── test_trainer.py
 ```
 
-## Citation
+## Scripts
 
-If you use akuru-token in your research, please cite:
-
-```bibtex
-@software{akuru_token,
-  author  = {Ayantha Randika},
-  title   = {akuru-token: A Grapheme-Aware BPE Tokenizer},
-  year    = {2025},
-  url     = {https://github.com/akuruAI/akuru-token},
-}
-```
+- `data_downloader.py` - download and cache Sinhala corpora (CC-100, Wikipedia, CulturaX).
+- `data_cleaner.py` - clean corpus lines and filter invalid Sinhala sequences.
+- `diff_sample.py` - sample raw vs cleaned lines into a unified diff for inspection.
+- `sinhala_validator.py` - validate Sinhala combining sequences (SLS 1134:2011).
+- `sin_eng_trainer.py` - train the `sin_eng` BPE vocabulary from cleaned corpora.

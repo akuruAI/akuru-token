@@ -13,6 +13,10 @@ Cleaning pipeline (per line):
   3. Drop syntactically incorrect lines even after the fix
   4. Post-fix filter   - drop lines that are empty or too short after fixing.
 
+Note: This process does not support touching letters and they will be dropped
+by either step 2 or 3. The pretokenizer grapheme splitter does not support
+touching letters either.
+
 Allowed Unicode ranges
 ----------------------
   Sinhala          U+0D80  - U+0DFF
