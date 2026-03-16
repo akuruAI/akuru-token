@@ -170,47 +170,71 @@ def _parse_tail_mark(
     """
     Parse the optional tail mark after a consonant cluster.
     Returns (new_i, is_valid, is_pure_consonant).
-
+ 
     is_pure_consonant is True when the tail mark is solely ් (hal kirima),
     meaning the cluster is a pure consonant and may not be followed by a
     semi-consonant (SLS 1134:2011 §3.3, §3.5).
     """
     if i >= n:
         return i, True, False
-
+ 
     cp = cps[i]
-
+ 
     # Semi-consonants are not tail marks - leave for _parse_semi_consonant
     if cp in (_ANUSVARAYA, _VISARGAYA):
         return i, True, False
-
+ 
     # ZWJ here is invalid (stray joiner after a complete cluster)
     if cp == _ZWJ:
         return i, False, False
-
+ 
     # Trailing kombuva (0DD9) is valid after a consonant in storage order.
     # e.g. කෙ = 0D9A 0DD9, rakaaraansaya+kombuva = C + ් + ZWJ + ර + 0DD9.
     # It is rejected as a *cluster-starter* (via _ALL_MARKS) but consumed here
     # when it legitimately trails its consonant.
+    # Kombuva may be followed by (Table 2, rows 13–17, decomposed keyboard forms):
+    #   ්      -diga kombuva ේ  (0DD9 + 0DCA)
+    #   ා      -kombuva haa aela-pilla ො  (0DD9 + 0DCF)
+    #   ා + ්    -kombuva haa diga aela-pilla ෝ  (0DD9 + 0DCF + 0DCA)
+    #   ෟ      -kombuva haa gayanukitta ෞ  (0DD9 + 0DDF)
+    # Anything else after kombuva is invalid.
     if cp == _KOMBUVA:
         i += 1
+        if i < n and cps[i] == _AL_LAKUNA:
+            # ේ decomposed
+            i += 1
+        elif i < n and cps[i] == 0x0DCF:
+            # ො or ෝ decomposed
+            i += 1
+            if i < n and cps[i] == _AL_LAKUNA:
+                i += 1
+        elif i < n and cps[i] == 0x0DDF:
+            # ෞ decomposed
+            i += 1
+        elif i < n and cps[i] in _ALL_MARKS:
+            # any other mark after kombuva is invalid
+            return i, False, False
         return i, True, False
-
+ 
     if cp not in (_ALL_MARKS):
         return i, True, False
-
+ 
     if cp in _SINGLE_VOWEL_SIGNS:
         i += 1
         # ෘ + ෘ = diga gaetta-pilla (keyboard decomposed form, §6.3b)
         if cp == 0x0DD8 and i < n and cps[i] == 0x0DD8:
             i += 1
+        # Any further mark after a vowel sign is invalid (Table 2: no such combinations).
+        # Semi-consonants are handled separately by _parse_semi_consonant.
+        if i < n and cps[i] in _ALL_MARKS and cps[i] not in (_ANUSVARAYA, _VISARGAYA):
+            return i, False, False
         return i, True, False
-
+ 
     if cp == _AL_LAKUNA:
         # hal kirima - pure consonant; semi-consonant not allowed after (§3.5)
         i += 1
         return i, True, True
-
+ 
     return i, False, False
 
 
@@ -326,8 +350,3 @@ def find_invalid(text: str) -> Optional[int]:
 
 def line_has_invalid_clusters(line: str) -> bool:
     return find_invalid(line) is not None
-
-
-# Use the following as a sanity check
-# print(find_invalid("අආඇඈඉඊඋඌඍඎඏඐඑඒඓඔඕඖ අාඅැඅෑඋෟඍෘඑ්ඔ්ඔෟ අංඅඃඅාං කකාකැකෑකිකීකුකූකෘකෘෘකෲකෟකෳකෙකේකෛකොකෝකෞ ක්ට් කාංකාඃකං ක්‍රක්‍රාක්‍රෙක්‍රේ ක්‍යක්‍යාක්‍යෙ ර්‍මර්‍මාර්‍ය්‍යකාර්‍ය්‍ය න්‍දක්‍ෂක්‍ෂ්‍රශ්‍රී ෦෧෨෩෪෫෬෭෮෯ ෴"))
-# print(find_invalid("ස‍්සඤ‍්ඤ‍්ඤ")) # touching characters with invalid two-touch cluster. Both should be invalid in this implementation
