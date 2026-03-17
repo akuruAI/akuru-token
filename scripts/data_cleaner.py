@@ -100,6 +100,9 @@ _SINHALA_VOWEL_SIGN = re.compile(r"([\u0dcf-\u0ddf\u0df2\u0df3])\1+")
 # Al lakuna: U+0DCA
 _AL_LAKUNA = re.compile(r"\u0dca\u0dca+")
 
+# Zero Width Non-Joiner - no valid use in Sinhala or English
+_ZWNJ = re.compile(r"\u200c+")
+
 # ZWJ not preceded by virama - strip the ZWJ
 # Lookbehind: not preceded by U+0DCA
 _INVALID_ZWJ = re.compile(r"(?<!\u0dca)\u200d")
@@ -122,6 +125,7 @@ def fix_line(line: str) -> str:
       5. Collapse repeated Sinhala viramas
       6. Strip leading/trailing whitespace
     """
+    line = _ZWNJ.sub("", line)
     line = _CONTROL_CHARS.sub("", line)
     line = _MULTI_ZWJ.sub("\u200d", line)
     line = _INVALID_ZWJ.sub("", line)
