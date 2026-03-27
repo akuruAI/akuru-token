@@ -64,9 +64,11 @@ Use `BPETrainer` with any pre-tokenizer and an iterable of strings. See [`script
 
 | Class | Word splitting | Base symbols | Use case |
 |-------|---------------|--------------|----------|
-| `GraphemePreTokenizer` | Whitespace | Grapheme clusters | Sinhala, mixed Sinhala–English |
+| `GraphemePreTokenizer` | Whitespace + digit boundary (`\p{N}{1,3}`) | Grapheme clusters | Sinhala, mixed Sinhala–English |
 | `GPT2PreTokenizer` | GPT-2 regex | Codepoints | English, Latin-script |
 | `WhitespacePreTokenizer` | Whitespace | Codepoints | Simple / reference use |
+
+The digit-boundary split in `GraphemePreTokenizer` caps numeric runs to 3 digits, following the [`\p{N}{1,3}` split pattern](https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py) in tiktoken's `cl100k_base` encoding. Without this, a number like `2024` is a single pre-tokenization unit, and if it is frequent enough in the corpus BPE will eventually merge its digits into a single token - one that is useless for encoding any other number. With the cap, `2024` pre-splits as `["202", "4"]` before BPE runs, so no digit token longer than 3 digits can ever form regardless of how often it appears in training data.
 
 The pre-tokenizer is recorded in the vocab JSON and resolved automatically on load - you never need to specify it manually.
 

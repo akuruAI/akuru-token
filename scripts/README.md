@@ -124,6 +124,24 @@ python scripts/sin_eng_trainer.py \
 
 Training logs to stdout via Python's `logging` module. A full run across all three corpora takes roughly 30–60 minutes depending on hardware.
 
+### Guaranteed Sinhala codepoints
+
+Before merge training begins, every valid Sinhala codepoint is injected directly into the initial vocabulary via the `guaranteed_tokens` parameter of `BPETrainer`. This covers the full set defined in [SLS 1134:2011](https://www.language.lk/download/sls1134/):
+
+| Range | Description |
+|-------|-------------|
+| U+0D82–U+0D83 | Various signs (anusvara, visarga) |
+| U+0D85–U+0D96 | Independent vowels |
+| U+0D9A–U+0DC6 | Consonants (excluding unassigned gaps) |
+| U+0DCA | Al-lakuna (virama) |
+| U+0DCF–U+0DDF | Vowel signs (excluding unassigned U+0DD5, U+0DD7) |
+| U+0DE6–U+0DEF | Sinhala Lith digits |
+| U+0DF2–U+0DF3 | Vowel signs (cont.) |
+| U+0DF4 | Kundaliya (punctuation) |
+| U+111E1–U+111F4 | Sinhala archaic numbers |
+
+Without this step, a codepoint absent from the training corpus would be missing from the initial symbol set entirely, causing `<unk>` at inference time for valid Sinhala characters that happened to be rare or absent in the data. Guaranteeing the full codepoint set upfront means the tokenizer can always represent any conforming Sinhala text, regardless of corpus coverage.
+
 ## Sinhala validator
 
 `sinhala_validator.py` is used internally by the cleaner but can also be used standalone to inspect specific lines:

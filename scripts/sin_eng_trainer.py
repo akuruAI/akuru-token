@@ -41,6 +41,23 @@ CORPUS_FILES = [
     "culturax/si.txt",
 ]
 
+SINHALA_CODEPOINTS = sorted(
+    set(chr(cp) for cp in range(0x0D82, 0x0D84))  # Various signs 0D82-0D83
+    | set(chr(cp) for cp in range(0x0D85, 0x0D97))  # Independent vowels  0D85-0D96
+    | (
+        set(chr(cp) for cp in range(0x0D9A, 0x0DC7))
+        - {chr(0x0DB2), chr(0x0DBC), chr(0x0DBE), chr(0x0DBF)}  # Consonants 0D9A-0DC6
+    )
+    | {chr(0x0DCA)}  # Al-lakuna 0DCA
+    | (
+        set(chr(cp) for cp in range(0x0DCF, 0x0DE0)) - {chr(0x0DD5), chr(0x0DD7)}
+    )  # Vowel signs 0DCF-0DDF
+    | set(chr(cp) for cp in range(0x0DE6, 0x0DF0))  # Sinhala Lith digits 0DE6-0DEF
+    | set(chr(cp) for cp in range(0x0DF2, 0x0DF4))  # Vowel signs (cont.) 0DF2-0DF3
+    | {chr(0x0DF4)}  # Kundaliya 0DF4
+    | set(chr(cp) for cp in range(0x111E1, 0x111F5))  # Archaic numbers 111E1-111F4
+)
+
 
 def iter_corpus(data_dir: Path) -> Iterator[str]:
     """
@@ -134,6 +151,7 @@ def main() -> None:
         min_frequency=args.min_frequency,
         pre_tokenizer=GraphemePreTokenizer(),
         show_progress=args.progress,
+        guaranteed_tokens=SINHALA_CODEPOINTS,
     )
 
     logger.info("Starting training...")

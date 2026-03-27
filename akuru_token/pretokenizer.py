@@ -58,7 +58,7 @@ def split_graphemes(text: str) -> List[str]:
         - ZWJ followed by punctuation or non-Sinhala characters
     Note: This function does not support touching letters
     """
-    clusters: List[str] = regex.findall(r'\X', text)
+    clusters: List[str] = regex.findall(r"\X", text)
     return _rejoin_sinhala_conjuncts(clusters)
 
 
@@ -91,6 +91,7 @@ def _rejoin_sinhala_conjuncts(clusters: List[str]) -> List[str]:
         i += 1
 
     return result
+
 
 class BasePreTokenizer(ABC):
     """
@@ -181,8 +182,9 @@ class GraphemePreTokenizer(BasePreTokenizer):
     keeps every Sinhala word intact, including its vowel signs, virama, and
     ZWJ conjuncts, ready for grapheme segmentation.
 
-    Punctuation is kept attached to its word (e.g. කිරිබත්,). BPE will
-    learn to split punctuation through merges, which is standard practice.
+    After whitespace splitting, each chunk is further split on digit/non-digit
+    boundaries with numeric runs capped at 3 digits (the tiktoken approach). 
+    Punctuation is kept attached to its word (e.g. කිරිබත්,).
 
     Symbol splitting
     ~~~~~~~~~~~~~~~~
@@ -199,6 +201,7 @@ class GraphemePreTokenizer(BasePreTokenizer):
     """
 
     _WHITESPACE = regex.compile(r" +")
+    _NUMBER_SPLIT = regex.compile(r"\p{N}{1,3}|[^\p{N}]+")
 
     def __init__(self, normalize: bool = True) -> None:
         super().__init__(normalize=normalize)
@@ -209,7 +212,15 @@ class GraphemePreTokenizer(BasePreTokenizer):
         for i, part in enumerate(parts):
             if not part:
                 continue
-            tokens.append(("\u0120" + part) if i > 0 else part)
+            subparts = self._NUMBER_SPLIT.findall(part)
+            for j, sub in enumerate(subparts):
+                if not sub:
+                    continue
+                # Attach the Ġ space marker only to the first sub-token
+                if i > 0 and j == 0:
+                    tokens.append("\u0120" + sub)
+                else:
+                    tokens.append(sub)
         return tokens
 
     def word_to_symbols(self, word: str) -> List[str]:

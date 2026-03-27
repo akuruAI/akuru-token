@@ -30,6 +30,8 @@ class BPETrainer:
         Pairs that appear fewer than this many times are not merged.
     special_tokens:
         Extra special tokens to add before byte characters.
+    guaranteed_tokens:
+        Tokens to force into the initial vocabulary before merge training.
     pre_tokenizer:
         How to split text into words before BPE. Defaults to GPT-2 style.
     show_progress:
@@ -41,6 +43,7 @@ class BPETrainer:
         vocab_size: int = 32_000,
         min_frequency: int = 2,
         special_tokens: Optional[List[str]] = None,
+        guaranteed_tokens: Optional[List[int]] = None,
         pre_tokenizer: Optional[BasePreTokenizer] = None,
         show_progress: int = 500,
     ) -> None:
@@ -52,6 +55,7 @@ class BPETrainer:
             Vocab.SPECIAL_BOS,
             Vocab.SPECIAL_EOS,
         ]
+        self.guaranteed_tokens = guaranteed_tokens
         self.pre_tokenizer: BasePreTokenizer = pre_tokenizer or DefaultPreTokenizer()
         self.show_progress = show_progress
 
@@ -145,11 +149,16 @@ class BPETrainer:
         return dict(counter)
 
     def _initialize_vocab(self, word_freqs: WordFreqs) -> Vocab:
+        
         vocab = Vocab()
         for tok in self.special_tokens:
             vocab.add_token(tok)
-
-        symbols: set = set()
+        
+        if self.guaranteed_tokens is None:
+            symbols: set = set()
+        else:
+             symbols: set = set(self.guaranteed_tokens)
+        
         for word in word_freqs:
             symbols.update(word)
         for sym in sorted(symbols):

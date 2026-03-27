@@ -70,6 +70,7 @@ def _in_allowed_range(cp: int) -> bool:
       U+2000-U+206F   General punctuation
       U+20A0-U+20CF   Currency symbols
       U+0D80-U+0DFF   Sinhala
+      U+111E1-U+111F4 Sinhala Archaic Numbers
     Whitespace is always allowed (checked separately).
     """
     return (
@@ -78,6 +79,7 @@ def _in_allowed_range(cp: int) -> bool:
         or 0x2000 <= cp <= 0x206F  # General punctuation
         or 0x20A0 <= cp <= 0x20CF  # Currency symbols
         or 0x0D80 <= cp <= 0x0DFF  # Sinhala
+        or 0x111E1 <= cp <= 0x111F4 # Sinhala Archaic Numbers
     )
 
 
