@@ -25,7 +25,6 @@ import difflib
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
 from data_cleaner import line_is_allowed, fix_line
 from sinhala_validator import find_invalid
 
