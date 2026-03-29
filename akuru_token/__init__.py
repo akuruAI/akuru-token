@@ -14,7 +14,6 @@ from .pretokenizer import (
     WhitespacePreTokenizer,
     GPT2PreTokenizer,
     GraphemePreTokenizer,
-    split_graphemes,
 )
 
 __all__ = [
