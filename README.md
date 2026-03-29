@@ -78,7 +78,7 @@ The pre-tokenizer is recorded in the vocab JSON and resolved automatically on lo
 {
   "pretokenizer": { "name": "GraphemePreTokenizer", "attributes": {} },
   "vocab": { "<unk>": 0, "<pad>": 1, "<bos>": 2, "<eos>": 3, "කි": 4, ... },
-  "merges": [["කි", "රི"], ["කිරි", "බ"], ...]
+  "merges": [["කි", "රි"], ["කිරි", "බ"], ...]
 }
 ```
 

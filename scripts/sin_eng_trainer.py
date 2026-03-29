@@ -21,7 +21,6 @@ from typing import Iterator
 
 from akuru_token import BPETrainer
 from akuru_token.pretokenizer import GraphemePreTokenizer
-from akuru_token.vocab import Vocab
 
 logging.basicConfig(
     level=logging.INFO,
