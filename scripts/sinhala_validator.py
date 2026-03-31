@@ -6,9 +6,11 @@ Returns the index of the first invalid codepoint, or None if valid.
 
 Public API
 ----------
-find_invalid(text)
+find_invalid(text, strict_conjunct=True)
     Return the index of the first invalid codepoint, or None if the text
     is fully valid.
+    If strict_conjunct is True, only conjuncts (except for yansaya and
+    rakaranshaya) that are in the mapping are allowed.
 
 line_has_invalid_clusters(line)
     Convenience wrapper; returns True when find_invalid() is not None.
@@ -93,6 +95,22 @@ _ALL_MARKS = _SINGLE_VOWEL_SIGNS | frozenset(
     }
 )
 
+# All the valid Sinhala conjunct pairs are mapped here for strict
+# conjunct evaluation. In the default strict mode any conjunct in the form
+# <consonant 1> + + ් + ZWJ + <consonant 2> where consonant 1 is not
+# mapped to consonant 2 in  the mapping, is flagged invalid.
+CONJUNCTS_MAP: dict[int, frozenset[int]] = {
+    0x0D9A: frozenset({0x0DC0, 0x0DC2}),  # ක  :  ['ව', 'ෂ']
+    0x0DAD: frozenset({0x0DC0, 0x0DAE}),  # ත  :  ['ව', 'ථ']
+    0x0DB1: frozenset({0x0DC0, 0x0DAE, 0x0DB0, 0x0DAF}),  # න  :  ['ව', 'ථ', 'ධ', 'ද']
+    0x0DAF: frozenset({0x0DC0, 0x0DB0}),  # ද  :  ['ව', 'ධ']
+    0x0DA7: frozenset({0x0DA8}),  # ට  :  ['ඨ']
+    0x0DA4: frozenset({0x0DA0, 0x0DA1, 0x0DA2}),  # ඤ  :  ['ච', 'ඡ', 'ජ']
+}
+
+for key, val in CONJUNCTS_MAP.items():
+    print(chr(key), " : ", [chr(x) for x in val])
+
 
 def _is_consonant(cp: int) -> bool:
     return _C_START <= cp <= _C_END and unicodedata.category(chr(cp)) == "Lo"
@@ -110,11 +128,13 @@ _YANSAYA_CONS = 0x0DBA  # ය
 _RAKAARAANSAYA_CONS = 0x0DBB  # ර
 
 
-def _parse_consonant_cluster(cps: list[int], i: int, n: int) -> tuple[int, bool]:
+def _parse_consonant_cluster(
+    cps: list[int], i: int, n: int, strict_conjunct=True
+) -> tuple[int, bool]:
     """
     Parse a consonant cluster in the standard conjunct encoding:
 
-    Conjunct (§5.8–5.10) — repaya, yansaya, rakaaraansaya, and other bandi forms:
+    Conjunct (§5.8-5.10) — repaya, yansaya, rakaaraansaya, and other bandi forms:
         [ ර + ් + ZWJ ] base_consonant [ ් + ZWJ + consonant ]
 
     Returns (new_i, is_valid).
@@ -150,12 +170,20 @@ def _parse_consonant_cluster(cps: list[int], i: int, n: int) -> tuple[int, bool]
                 return i, False
 
             consumed_cons = cps[i + 2]
-            i += 3
-
             if consumed_cons in (_YANSAYA_CONS, _RAKAARAANSAYA_CONS):
                 prev_conjunct_is_terminal = True
             else:
                 prev_conjunct_is_terminal = False
+
+                # Check whether a given consonant is valid by mapping
+                if strict_conjunct and (
+                    cps[i - 1] not in CONJUNCTS_MAP
+                    or cps[i + 2] not in CONJUNCTS_MAP[cps[i - 1]]
+                ):
+                    print(hex(cps[i]), hex(cps[i + 2]))
+                    return i, False
+
+            i += 3
         else:
             break
 
@@ -170,24 +198,24 @@ def _parse_tail_mark(
     """
     Parse the optional tail mark after a consonant cluster.
     Returns (new_i, is_valid, is_pure_consonant).
- 
+
     is_pure_consonant is True when the tail mark is solely ් (hal kirima),
     meaning the cluster is a pure consonant and may not be followed by a
     semi-consonant (SLS 1134:2011 §3.3, §3.5).
     """
     if i >= n:
         return i, True, False
- 
+
     cp = cps[i]
- 
+
     # Semi-consonants are not tail marks - leave for _parse_semi_consonant
     if cp in (_ANUSVARAYA, _VISARGAYA):
         return i, True, False
- 
+
     # ZWJ here is invalid (stray joiner after a complete cluster)
     if cp == _ZWJ:
         return i, False, False
- 
+
     # Trailing kombuva (0DD9) is valid after a consonant in storage order.
     # e.g. කෙ = 0D9A 0DD9, rakaaraansaya+kombuva = C + ් + ZWJ + ර + 0DD9.
     # It is rejected as a *cluster-starter* (via _ALL_MARKS) but consumed here
@@ -215,10 +243,10 @@ def _parse_tail_mark(
             # any other mark after kombuva is invalid
             return i, False, False
         return i, True, False
- 
+
     if cp not in (_ALL_MARKS):
         return i, True, False
- 
+
     if cp in _SINGLE_VOWEL_SIGNS:
         i += 1
         # ෘ + ෘ = diga gaetta-pilla (keyboard decomposed form, §6.3b)
@@ -229,12 +257,12 @@ def _parse_tail_mark(
         if i < n and cps[i] in _ALL_MARKS and cps[i] not in (_ANUSVARAYA, _VISARGAYA):
             return i, False, False
         return i, True, False
- 
+
     if cp == _AL_LAKUNA:
         # hal kirima - pure consonant; semi-consonant not allowed after (§3.5)
         i += 1
         return i, True, True
- 
+
     return i, False, False
 
 
@@ -251,7 +279,7 @@ def _parse_semi_consonant(cps: list[int], i: int, n: int) -> tuple[int, bool]:
     return i, True
 
 
-def find_invalid(text: str) -> Optional[int]:
+def find_invalid(text: str, strict_conjunct=True) -> Optional[int]:
     """
     Return index of first invalid codepoint, or None if text is valid.
 
@@ -309,7 +337,7 @@ def find_invalid(text: str) -> Optional[int]:
 
         #  Consonant cluster
         if _is_consonant(cp):
-            i, ok = _parse_consonant_cluster(cps, i, n)
+            i, ok = _parse_consonant_cluster(cps, i, n, strict_conjunct)
             if not ok:
                 return i
 
