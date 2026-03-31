@@ -108,9 +108,6 @@ CONJUNCTS_MAP: dict[int, frozenset[int]] = {
     0x0DA4: frozenset({0x0DA0, 0x0DA1, 0x0DA2}),  # ඤ  :  ['ච', 'ඡ', 'ජ']
 }
 
-for key, val in CONJUNCTS_MAP.items():
-    print(chr(key), " : ", [chr(x) for x in val])
-
 
 def _is_consonant(cp: int) -> bool:
     return _C_START <= cp <= _C_END and unicodedata.category(chr(cp)) == "Lo"
@@ -180,7 +177,6 @@ def _parse_consonant_cluster(
                     cps[i - 1] not in CONJUNCTS_MAP
                     or cps[i + 2] not in CONJUNCTS_MAP[cps[i - 1]]
                 ):
-                    print(hex(cps[i]), hex(cps[i + 2]))
                     return i, False
 
             i += 3
