@@ -140,7 +140,7 @@ The built-in `sin_eng` vocabulary uses 12,000 tokens. This was chosen by measuri
 | 18000 |     1.384 |             2,036 |                 3.25 |                   5 |
 | 20000 |     1.360 |             2,446 |                 3.29 |                   5 |
 
-![Fertility vs vocab size](..\docs\fertility_chart.png)
+![Fertility vs vocab size](../docs/fertility_chart.png)
 
 The fertility curve has a clear inflection point around 8,000–12,000. The step from 8k to 12k yields a fertility improvement of 0.142; the next equivalent step (12k to 14k) yields only 0.045, and returns continue to diminish beyond that. Beyond 12k the merge budget is spent primarily on absorbing rare inflected word forms rather than compositionally useful syllabic and morphemic units.
 
