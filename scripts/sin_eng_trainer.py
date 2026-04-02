@@ -41,7 +41,8 @@ CORPUS_FILES = [
 ]
 
 SINHALA_CODEPOINTS = sorted(
-    set(chr(cp) for cp in range(0x0D82, 0x0D84))  # Various signs 0D82-0D83
+    {chr(0x200D)} # zero width joiner
+    | set(chr(cp) for cp in range(0x0D82, 0x0D84))  # Various signs 0D82-0D83
     | set(chr(cp) for cp in range(0x0D85, 0x0D97))  # Independent vowels  0D85-0D96
     | (
         set(chr(cp) for cp in range(0x0D9A, 0x0DC7))
@@ -100,7 +101,7 @@ def main() -> None:
         "--vocab-size",
         "-vs",
         type=int,
-        default=16_000,
+        default=12_000,
         help="Target vocabulary size (default: 16000)",
     )
     parser.add_argument(

@@ -108,14 +108,14 @@ Key options:
 
 ```bash
 python scripts/sin_eng_trainer.py \
-    --vocab-size 16000 \
+    --vocab-size 12000 \
     --min-frequency 2 \
     --progress 500
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--vocab-size` | `16000` | Target vocabulary size |
+| `--vocab-size` | `12000` | Target vocabulary size |
 | `--min-frequency` | `2` | Minimum pair frequency to merge |
 | `--data-dir` | `data/clean` | Directory containing cleaned corpora |
 | `--output` | `akuru_token/vocabs/sin_eng.json` | Output path |
@@ -124,23 +124,29 @@ python scripts/sin_eng_trainer.py \
 
 Training logs to stdout via Python's `logging` module. A full run across all three corpora takes roughly 30–60 minutes depending on hardware.
 
-### Guaranteed Sinhala codepoints
+### Choosing vocab size
 
-Before merge training begins, every valid Sinhala codepoint is injected directly into the initial vocabulary via the `guaranteed_tokens` parameter of `BPETrainer`. This covers the full set defined in [SLS 1134:2011](https://www.language.lk/download/sls1134/):
+The built-in `sin_eng` vocabulary uses 12,000 tokens. This was chosen by measuring fertility (tokens per word) across vocabulary sizes from 2,000 to 20,000 on a 2M Sinhala sample from the same corpora:
 
-| Range | Description |
-|-------|-------------|
-| U+0D82–U+0D83 | Various signs (anusvara, visarga) |
-| U+0D85–U+0D96 | Independent vowels |
-| U+0D9A–U+0DC6 | Consonants (excluding unassigned gaps) |
-| U+0DCA | Al-lakuna (virama) |
-| U+0DCF–U+0DDF | Vowel signs (excluding unassigned U+0DD5, U+0DD7) |
-| U+0DE6–U+0DEF | Sinhala Lith digits |
-| U+0DF2–U+0DF3 | Vowel signs (cont.) |
-| U+0DF4 | Kundaliya (punctuation) |
-| U+111E1–U+111F4 | Sinhala archaic numbers |
+| vocab | fertility | whole-word tokens | mean grapheme length | p90 grapheme length |
+|------:|----------:|------------------:|---------------------:|--------------------:|
+|  2000 |     3.178 |                 0 |                 2.12 |                   2 |
+|  4000 |     2.024 |                48 |                 2.56 |                   4 |
+|  6000 |     1.766 |               175 |                 2.75 |                   4 |
+|  8000 |     1.634 |               380 |                 2.88 |                   4 |
+| 10000 |     1.551 |               628 |                 2.98 |                   4 |
+| **12000** | **1.492** | **955** |             **3.07** |               **5** |
+| 14000 |     1.447 |             1,261 |                 3.14 |                   5 |
+| 18000 |     1.384 |             2,036 |                 3.25 |                   5 |
+| 20000 |     1.360 |             2,446 |                 3.29 |                   5 |
 
-Without this step, a codepoint absent from the training corpus would be missing from the initial symbol set entirely, causing `<unk>` at inference time for valid Sinhala characters that happened to be rare or absent in the data. Guaranteeing the full codepoint set upfront means the tokenizer can always represent any conforming Sinhala text, regardless of corpus coverage.
+![Fertility vs vocab size](..\docs\fertility_chart.png)
+
+The fertility curve has a clear inflection point around 8,000–12,000. The step from 8k to 12k yields a fertility improvement of 0.142; the next equivalent step (12k to 14k) yields only 0.045, and returns continue to diminish beyond that. Beyond 12k the merge budget is spent primarily on absorbing rare inflected word forms rather than compositionally useful syllabic and morphemic units.
+
+This matters more for Sinhala than for English: Sinhala is moderately agglutinative, so whole-word tokens (955 at 12k) cover a narrow set of frequent inflected forms and do not generalise across the morphological space. The `p90_gl` column (grapheme length at the 90th percentile of merged tokens) stabilises at 5 from 12k onwards, confirming that additional merges beyond this point are not learning qualitatively longer or more useful tokens.
+
+12k keeps the embedding table and softmax layer lean at a fertility of 1.492.
 
 ## Sinhala validator
 
