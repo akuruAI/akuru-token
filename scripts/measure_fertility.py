@@ -246,7 +246,7 @@ def main() -> None:
 
         print(f"  fertility     : {fertility:.3f}")
         print(f"  whole_words   : {whole_words:,}")
-        print(f"  token length distribution (graphemes):")
+        print("  token length distribution (graphemes):")
         print_length_distribution(ld)
 
     print_summary_table(results)
