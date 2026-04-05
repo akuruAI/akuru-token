@@ -146,6 +146,11 @@ class GPT2PreTokenizer(BasePreTokenizer):
 
     Handles English contractions, punctuation, and digits.
     Leading space is encoded as Ġ (U+0120) so the model is space-aware.
+
+    Note: this is a comparison-point implementation, not a drop-in
+    replacement for the official GPT-2 tokenizer (which uses byte-level
+    encoding via ``bytes_to_unicode()``). Digit capping is intentionally
+    omitted to match original GPT-2 behaviour.
     """
 
     _PATTERN = regex.compile(
@@ -160,7 +165,10 @@ class GPT2PreTokenizer(BasePreTokenizer):
         tokens = []
         for match in self._PATTERN.finditer(self._normalize(text)):
             word = match.group()
-            if word.startswith(" "):
+            if word.isspace():
+                # Replace spaces with Ġ, keep non-space whitespace as-is
+                word = word.replace(" ", "\u0120")
+            elif word.startswith(" "):
                 word = "\u0120" + word[1:]
             tokens.append(word)
         return tokens
