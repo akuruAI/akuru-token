@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>akuru-token - Live Tokenizer Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=Noto+Serif+Sinhala:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --cream:  #f5f6fa;
+    --ivory:  #eceef5;
+    --sand:   #c8cdd8;
+    --clay:   #a0aab8;
+    --ink:    #1e2433;
+    --sepia:  #3d4a5c;
+    --rust:   #3d4f8a;
+    --gold:   #7b9abf;
+    --muted:  #6a7585;
+    --font-serif: 'Libre Baskerville', Georgia, serif;
+    --font-mono:  'DM Mono', monospace;
+    --font-sinh:  'Noto Serif Sinhala', serif;
+  }
+
+  body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: var(--font-serif);
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.7;
+  }
+
+  /* noise grain */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 1000; opacity: 0.6;
+  }
+
+  /* checkered grid */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--sand) 1px, transparent 1px),
+      linear-gradient(90deg, var(--sand) 1px, transparent 1px);
+    background-size: 52px 52px;
+    opacity: 0.15;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── Container ── */
+  .container {
+    max-width: 900px; margin: 0 auto;
+    padding: 0 2rem 80px;
+    position: relative; z-index: 1;
+  }
+
+  /* ── Header ── */
+  header {
+    padding: 40px 0 40px;
+    display: flex; flex-direction: column; gap: 12px;
+    border-bottom: 1px solid var(--sand);
+    margin-bottom: 36px;
+  }
+  .header-eyebrow {
+    font-family: var(--font-mono); font-size: 0.7rem;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--rust);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .header-eyebrow::before {
+    content: ''; display: inline-block;
+    width: 20px; height: 1px; background: var(--rust);
+  }
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    font-weight: 700; line-height: 1.12;
+    letter-spacing: -0.02em; color: var(--ink);
+  }
+  h1 span { color: var(--rust); }
+  .subtitle {
+    color: var(--sepia); font-size: 0.95rem;
+    line-height: 1.7; max-width: 560px;
+  }
+
+  /* ── Vocab status pills ── */
+  .vocab-bar {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px;
+  }
+  .vocab-pill {
+    background: var(--ivory); border: 1px solid var(--sand);
+    border-radius: 6px; padding: 10px 16px;
+    display: flex; align-items: center; gap: 10px;
+    flex: 1; min-width: 220px; transition: border-color 0.2s;
+  }
+  .vocab-pill.loaded { border-color: var(--rust); }
+  .vocab-pill.error  { border-color: #c0392b; }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    background: var(--clay); transition: background 0.3s;
+  }
+  .status-dot.loading { background: var(--gold); animation: pulse 1s ease-in-out infinite; }
+  .status-dot.loaded  { background: var(--rust); }
+  .status-dot.error   { background: #c0392b; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .vocab-info { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+  .vocab-name {
+    font-family: var(--font-mono); font-size: 0.78rem;
+    font-weight: 500; color: var(--ink); letter-spacing: 0.04em;
+  }
+  .vocab-meta {
+    font-family: var(--font-mono); font-size: 0.68rem;
+    color: var(--muted); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .vocab-meta.error { color: #c0392b; }
+
+  /* ── Input ── */
+  .input-section { margin-bottom: 24px; }
+  .input-label {
+    font-family: var(--font-mono); font-size: 0.68rem;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 8px; display: block;
+  }
+  textarea {
+    width: 100%; background: white;
+    border: 1px solid var(--sand); border-radius: 4px;
+    color: var(--ink); font-family: var(--font-mono);
+    font-size: 0.95rem; line-height: 1.6;
+    padding: 14px 16px; resize: vertical; min-height: 100px;
+    outline: none; transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--rust); }
+  textarea::placeholder { color: var(--clay); }
+
+  .samples {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+    align-items: center;
+  }
+  .samples-label {
+    font-family: var(--font-mono); font-size: 0.65rem;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--clay); margin-right: 2px;
+  }
+  .sample-btn {
+    background: white; border: 1px solid var(--sand);
+    border-radius: 3px; color: var(--sepia); cursor: pointer;
+    font-family: var(--font-mono); font-size: 0.72rem;
+    padding: 4px 10px; transition: all 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .sample-btn:hover {
+    border-color: var(--rust); color: var(--rust);
+    background: var(--ivory);
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--sand);
+    margin-bottom: 28px;
+  }
+  .tab {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    color: var(--muted); cursor: pointer;
+    font-family: var(--font-mono); font-size: 0.72rem;
+    font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 10px 20px; transition: all 0.18s; white-space: nowrap;
+  }
+  .tab.active { color: var(--rust); border-bottom-color: var(--rust); }
+  .tab:hover:not(.active) { color: var(--sepia); }
+
+  /* ── Results ── */
+  .results { display: flex; flex-direction: column; gap: 20px; }
+
+  /* ── Panel ── */
+  .panel {
+    background: white; border: 1px solid var(--sand);
+    border-radius: 4px; overflow: hidden;
+  }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 16px; border-bottom: 1px solid var(--ivory);
+    background: var(--ivory); flex-wrap: wrap; gap: 8px;
+  }
+  .panel-title {
+    font-family: var(--font-mono); font-size: 0.7rem;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--sepia);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    background: var(--rust);
+  }
+  .panel-dot.gold   { background: var(--gold); }
+  .panel-dot.clay   { background: var(--clay); }
+  .panel-dot.ink    { background: var(--ink); }
+
+  .panel-badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .badge {
+    background: var(--cream); border: 1px solid var(--sand);
+    border-radius: 3px; font-family: var(--font-mono); font-size: 0.65rem;
+    padding: 2px 8px; color: var(--muted); letter-spacing: 0.04em;
+  }
+  .badge b { color: var(--ink); font-weight: 500; }
+  .badge.accent { border-color: var(--rust); color: var(--rust); }
+  .copy-all-btn {
+    background: none; border: 1px solid var(--sand);
+    border-radius: 3px; font-family: var(--font-mono); font-size: 0.65rem;
+    padding: 2px 10px; color: var(--muted); letter-spacing: 0.06em;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .copy-all-btn:hover { border-color: var(--rust); color: var(--rust); background: var(--ivory); }
+  .copy-all-btn.copied { border-color: var(--rust); color: var(--rust); }
+
+  .panel-body { padding: 16px; min-height: 64px; }
+
+  .panel-sub { padding: 12px 16px 14px; border-top: 1px dashed var(--sand); }
+  .panel-sub-label {
+    font-family: var(--font-mono); font-size: 0.62rem;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--clay); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .panel-sub-label::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(to right, var(--sand), transparent);
+  }
+
+  /* ── Token chips ── */
+  .token-stream {
+    display: flex; flex-wrap: wrap; gap: 5px;
+    align-items: flex-start; line-height: 1;
+  }
+
+  .token {
+    display: inline-flex; align-items: center;
+    border-radius: 3px; font-family: var(--font-mono); font-size: 0.82rem;
+    padding: 3px 8px; cursor: default; white-space: pre;
+    transition: transform 0.1s, box-shadow 0.1s;
+    animation: fadeUp 0.2s ease both;
+    border: 1px solid;
+  }
+  .token:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(30,36,51,0.12);
+    z-index: 2;
+  }
+
+  /* colour palette - vivid popping colours */
+  .token:nth-child(7n+1) { background:rgba(232,201,106,0.18); border-color:rgba(232,201,106,0.55); color:#8a6000; }
+  .token:nth-child(7n+2) { background:rgba(55,210,130,0.15);  border-color:rgba(55,210,130,0.5);   color:#0a6e3f; }
+  .token:nth-child(7n+3) { background:rgba(80,160,255,0.15);  border-color:rgba(80,160,255,0.5);   color:#0048b0; }
+  .token:nth-child(7n+4) { background:rgba(255,80,80,0.13);   border-color:rgba(255,80,80,0.45);   color:#b01010; }
+  .token:nth-child(7n+5) { background:rgba(180,80,255,0.13);  border-color:rgba(180,80,255,0.45);  color:#7010b0; }
+  .token:nth-child(7n+6) { background:rgba(255,140,50,0.15);  border-color:rgba(255,140,50,0.5);   color:#8a4000; }
+  .token:nth-child(7n+0) { background:rgba(20,200,200,0.13);  border-color:rgba(20,200,200,0.45);  color:#006666; }
+
+  /* muted pre-tokens */
+  .pretoken {
+    display: inline-flex; align-items: center; border-radius: 3px;
+    font-family: var(--font-mono); font-size: 0.75rem;
+    padding: 2px 6px; white-space: pre; cursor: default;
+    background: var(--ivory); border: 1px solid var(--sand); color: var(--clay);
+    animation: fadeUp 0.16s ease both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(4px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+
+  .space-mark { opacity: 0.5; font-size: 0.62rem; margin-right: 2px; }
+  .tok-id     { font-size: 0.58rem; opacity: 0.4; margin-left: 4px; }
+
+  .empty-hint { color: var(--clay); font-size: 0.88rem; font-style: italic; }
+  .loading-hint {
+    color: var(--muted); font-size: 0.78rem;
+    font-family: var(--font-mono); display: flex; align-items: center; gap: 8px;
+  }
+  .no-vocab-hint {
+    color: var(--muted); font-size: 0.78rem; font-family: var(--font-mono);
+    background: var(--ivory); border: 1px dashed var(--sand);
+    border-radius: 4px; padding: 12px 14px; line-height: 1.6;
+  }
+  .no-vocab-hint strong { color: var(--rust); }
+
+  /* ── Compare table ── */
+  .compare-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+  .compare-table th {
+    font-family:var(--font-mono); font-size:0.65rem; text-transform:uppercase;
+    letter-spacing:0.1em; color:var(--muted); text-align:left;
+    padding:9px 14px; border-bottom:1px solid var(--sand); background:var(--ivory);
+  }
+  .compare-table td {
+    padding:9px 14px; border-bottom:1px solid var(--ivory);
+    font-family:var(--font-mono); vertical-align:middle; color: var(--sepia);
+  }
+  .compare-table tr:last-child td { border-bottom:none; }
+  .compare-table .rl { color:var(--ink); font-weight:500; }
+  .compare-table td.better { color:var(--rust); font-weight:500; }
+
+  /* ── Explainer ── */
+  .explainer {
+    background: var(--ivory); border: 1px solid var(--sand);
+    border-left: 3px solid var(--rust);
+    border-radius: 0 4px 4px 0;
+    padding: 18px 20px; font-size: 0.88rem;
+    line-height: 1.75; color: var(--sepia); margin-top: 28px;
+  }
+  .explainer strong { color: var(--ink); }
+  .explainer code {
+    font-family: var(--font-mono); font-size: 0.78rem;
+    background: white; padding: 1px 5px;
+    border: 1px solid var(--sand); border-radius: 2px;
+    color: var(--rust);
+  }
+
+  /* ── Footer ── */
+  footer {
+    margin-top: 60px; padding-top: 24px;
+    border-top: 1px solid var(--sand);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .footer-logo {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .footer-logo img { width: 22px; height: 26px; object-fit: contain; }
+  footer p {
+    color: var(--muted); font-family: var(--font-mono);
+    font-size: 0.7rem; letter-spacing: 0.06em;
+  }
+  footer a {
+    color: var(--rust); text-decoration: none;
+    font-family: var(--font-mono); font-size: 0.7rem;
+    letter-spacing: 0.06em; border-bottom: 1px solid var(--sand);
+    transition: border-color 0.2s;
+  }
+  footer a:hover { border-color: var(--rust); }
+
+  @media (max-width: 600px) {
+    nav { padding: 1rem 1.2rem; }
+    .container { padding: 0 1.2rem 60px; }
+    header { padding: 80px 0 28px; }
+    .tabs { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+
+
+
+<div class="container">
+
+  <header>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div style="display:flex;flex-direction:column;gap:12px;flex:1">
+        <div class="header-eyebrow">akuru-token · tokenizer demo · <span id="pkg-version">v…</span></div>
+        <h1>How text becomes <span style="color:var(--rust)">tokens</span></h1>
+        <p class="subtitle">
+          Full BPE tokenization with trained merge rules.
+          Both vocabularies are trained on the same Sinhala-English corpus,
+          the difference is only in how text is split before BPE runs:
+          grapheme clusters vs Unicode codepoints.
+        </p>
+      </div>
+      <a href="https://github.com/akuruAI/akuru-token" target="_blank" rel="noopener"
+         style="font-family:var(--font-mono);font-size:0.68rem;letter-spacing:0.1em;
+                text-transform:uppercase;color:var(--muted);text-decoration:none;
+                border:1px solid var(--sand);border-radius:3px;padding:6px 12px;
+                white-space:nowrap;margin-left:24px;margin-top:4px;
+                transition:color 0.2s,border-color 0.2s;"
+         onmouseover="this.style.color='var(--rust)';this.style.borderColor='var(--rust)'"
+         onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--sand)'">
+        GitHub ↗
+      </a>
+    </div>
+  </header>
+
+  <!-- Vocab status -->
+  <div class="vocab-bar">
+    <div class="vocab-pill" id="pill-sin-eng">
+      <span class="status-dot loading" id="dot-sin-eng"></span>
+      <div class="vocab-info">
+        <span class="vocab-name">sin_eng</span>
+        <span class="vocab-meta" id="meta-sin-eng">Loading…</span>
+      </div>
+    </div>
+    <div class="vocab-pill" id="pill-sin-eng-gpt2">
+      <span class="status-dot loading" id="dot-sin-eng-gpt2"></span>
+      <div class="vocab-info">
+        <span class="vocab-name">sin_eng_gpt2</span>
+        <span class="vocab-meta" id="meta-sin-eng-gpt2">Loading…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Text input -->
+  <div class="input-section">
+    <label class="input-label" for="inputText">Input text</label>
+    <textarea id="inputText" placeholder="Type Sinhala, English, or both…&#10;e.g.  ශ්‍රී ලංකාව is a beautiful island."></textarea>
+    <div class="samples">
+      <span class="samples-label">try:</span>
+      <button class="sample-btn" data-text="ශ්‍රී ලංකාව">ශ්‍රී ලංකාව</button>
+      <button class="sample-btn" data-text="කිරිබත්">කිරිබත්</button>
+      <button class="sample-btn" data-text="hello world">hello world</button>
+      <button class="sample-btn" data-text="ශ්‍රී ලංකාව is a beautiful island.">mixed sentence</button>
+      <button class="sample-btn" data-text="දළදා මාළිගාව">දළදා මාළිගාව</button>
+      <button class="sample-btn" data-text="නමොතස‍්ස භගවතො අරහතො සම‍්මා සම‍්බුද‍්ධස‍්ස ">Pali phrase</button>
+      <button class="sample-btn" data-text="ආයුබෝවන් ශ්‍රී ලංකා!">greeting</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-mode="bpe"     role="tab">BPE tokens</button>
+    <button class="tab"        data-mode="pre"     role="tab">Pre-tokens</button>
+    <button class="tab"        data-mode="compare" role="tab">Compare stats</button>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="results"></div>
+
+  <div class="explainer">
+    <strong>How it works.</strong>
+    Both vocab files are fetched from GitHub on page load. The merge rules from each
+    JSON are used to run the full BPE algorithm - each word is split into base symbols
+    (grapheme clusters for <code>sin_eng</code>, codepoints for <code>sin_eng_gpt2</code>),
+    then the lowest-ranked merge pair is applied repeatedly, exactly matching
+    <code>BPETokenizer._bpe()</code> in Python.
+    <br><br>
+    <strong>About the vocabs.</strong>
+    <code>sin_eng</code> and <code>sin_eng_gpt2</code> are both trained from scratch on the
+    same Sinhala–English corpus. <code>sin_eng_gpt2</code> is <em>not</em> the original
+    GPT-2 vocabulary. It uses the GPT-2 pre-tokenization strategy (regex word splitting,
+    codepoint symbols) but with merge rules learned entirely from our training data.
+    Same corpus, same vocab size, different atomic unit.
+    <br><br>
+    <strong>Token IDs</strong> appear on each chip (hover for the full ID).
+    <strong>Space marker <code>Ġ</code></strong> encodes a leading space so word
+    boundaries are preserved without a separate token.
+  </div>
+
+  <footer>
+    <div class="footer-logo">
+      <img src="data:image/jpeg;base64,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" alt="akuruAI logo">
+      <span style="font-family:var(--font-mono);font-size:0.78rem;color:var(--sand);letter-spacing:0.06em;">akuruAI</span>
+    </div>
+    <p>© 2025 akuruAI - Open Source</p>
+    <a href="https://github.com/akuruAI/akuru-token" target="_blank" rel="noopener">github.com/akuruAI/akuru-token ↗</a>
+  </footer>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────
+//  CONFIGURATION  ← replace URLs when vocab files are live
+// ─────────────────────────────────────────────────────────
+const VOCABS = {
+  'sin_eng': {
+    url: 'https://raw.githubusercontent.com/akuruAI/akuru-token/main/akuru_token/vocabs/sin_eng.json',
+  },
+  'sin_eng_gpt2': {
+    url: 'https://raw.githubusercontent.com/akuruAI/akuru-token/main/akuru_token/vocabs/sin_eng_gpt2.json',
+  },
+};
+
+// ─────────────────────────────────────────────────────────
+//  Grapheme segmentation
+// ─────────────────────────────────────────────────────────
+function isSinhalaConsonant(cp) { return cp >= 0x0D9A && cp <= 0x0DC6; }
+
+function splitGraphemes(text) {
+  let clusters;
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    clusters = [...seg.segment(text)].map(s => s.segment);
+  } else { clusters = [...text]; }
+  return rejoinConjuncts(clusters);
+}
+
+function rejoinConjuncts(clusters) {
+  const out = []; let i = 0;
+  while (i < clusters.length) {
+    let cur = clusters[i];
+    while (i + 1 < clusters.length && cur.endsWith('\u0DCA\u200D') &&
+           isSinhalaConsonant(clusters[i + 1].codePointAt(0))) { i++; cur += clusters[i]; }
+    out.push(cur); i++;
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────
+//  Pre-tokenizers
+// ─────────────────────────────────────────────────────────
+const SEGMENT_RE = /[^\s]+|[ ]+|[^\S ]+/gu;
+const NUMBER_SPLIT_RE = /\p{N}{1,3}|[^\p{N}]+/gu;
+function graphemePreTokenize(text) {
+  const segments = text.normalize('NFC').match(SEGMENT_RE) || [];
+  const tokens = [];
+  let pendingSpace = false;
+
+  for (const seg of segments) {
+    const ch = seg[0];
+    if (!/\s/.test(ch)) {
+      // Non-whitespace: apply number splitting
+      const subparts = seg.match(NUMBER_SPLIT_RE) || [seg];
+      for (let j = 0; j < subparts.length; j++) {
+        if (!subparts[j]) continue;
+        if (pendingSpace && j === 0) {
+          tokens.push('\u0120' + subparts[j]);
+          pendingSpace = false;
+        } else {
+          tokens.push(subparts[j]);
+        }
+      }
+    } else if (ch === ' ') {
+      // Space run: all but last become standalone Ġ, last sets pendingSpace
+      for (let k = 0; k < seg.length - 1; k++) tokens.push('\u0120');
+      pendingSpace = true;
+    } else {
+      // Non-space whitespace run (\n, \t, \r, etc.) - hard boundary
+      if (pendingSpace) { tokens.push('\u0120'); pendingSpace = false; }
+      tokens.push(seg);
+    }
+  }
+
+  if (pendingSpace) tokens.push('\u0120');
+  return tokens;
+}
+function graphemeWordToSymbols(word) {
+  return word.startsWith('\u0120') ? ['\u0120', ...splitGraphemes(word.slice(1))] : splitGraphemes(word);
+}
+
+const GPT2_RE = /'s|'t|'re|'ve|'m|'ll|'d| ?[\p{L}\p{N}_]+| ?\p{N}+| ?[^\s\p{L}\p{N}_]+|\s+(?!\S)|\s+/gu;
+function gpt2PreTokenize(text) {
+  const out = [];
+  for (const m of text.normalize('NFC').matchAll(GPT2_RE)) {
+    let w = m[0];
+    if (/^\s+$/.test(w)) {
+      // Whitespace-only: replace spaces with Ġ, keep non-space whitespace as-is
+      w = w.replace(/ /g, '\u0120');
+    } else if (w.startsWith(' ')) {
+      w = '\u0120' + w.slice(1);
+    }
+    out.push(w);
+  }
+  return out;
+}
+function gpt2WordToSymbols(word) { return [...word]; }
+
+function preSymbols(text, ptName) {
+  const isGPT2 = ptName === 'GPT2PreTokenizer';
+  const pt = isGPT2 ? gpt2PreTokenize : graphemePreTokenize;
+  const sym = isGPT2 ? gpt2WordToSymbols : graphemeWordToSymbols;
+  const out = [];
+  for (const w of pt(text)) for (const s of sym(w)) out.push(s);
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────
+//  BPE merge engine
+// ─────────────────────────────────────────────────────────
+function buildVocabState(json) {
+  const tokenToId = json.vocab;
+  const mergeRank = new Map();
+  for (let i = 0; i < json.merges.length; i++) {
+    const [a, b] = json.merges[i]; mergeRank.set(a + '\x00' + b, i);
+  }
+  return {
+    tokenToId, mergeRank,
+    ptName:     json.pretokenizer?.name ?? 'GraphemePreTokenizer',
+    vocabSize:  Object.keys(tokenToId).length,
+    mergeCount: json.merges.length,
+    unkId:      tokenToId['<unk>'] ?? 0,
+  };
+}
+
+function bpeWord(symbols, mergeRank) {
+  while (symbols.length > 1) {
+    let bestRank = Infinity, bestIdx = -1;
+    for (let i = 0; i < symbols.length - 1; i++) {
+      const r = mergeRank.get(symbols[i] + '\x00' + symbols[i + 1]);
+      if (r !== undefined && r < bestRank) { bestRank = r; bestIdx = i; }
+    }
+    if (bestIdx === -1) break;
+    symbols = [...symbols.slice(0, bestIdx), symbols[bestIdx] + symbols[bestIdx + 1], ...symbols.slice(bestIdx + 2)];
+  }
+  return symbols;
+}
+
+function encode(text, vocab) {
+  const isGPT2 = vocab.ptName === 'GPT2PreTokenizer';
+  const pt  = isGPT2 ? gpt2PreTokenize   : graphemePreTokenize;
+  const sym = isGPT2 ? gpt2WordToSymbols : graphemeWordToSymbols;
+  const out = [];
+  for (const word of pt(text)) {
+    // Decompose unknown symbols into codepoints (unk_fallback)
+    const symbols = [];
+    for (const s of sym(word)) {
+      if (s in vocab.tokenToId) symbols.push(s);
+      else symbols.push(...[...s]);
+    }
+    for (const tok of bpeWord(symbols, vocab.mergeRank))
+      out.push({ token: tok, id: vocab.tokenToId[tok] ?? vocab.unkId });
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────
+//  Vocab loading
+// ─────────────────────────────────────────────────────────
+const vocabs = {};
+
+function pillId(key) { return key.replace(/_/g, '-'); }
+
+function setVocabStatus(key, state, metaText) {
+  const id   = pillId(key);
+  const dot  = document.getElementById('dot-'  + id);
+  const meta = document.getElementById('meta-' + id);
+  const pill = document.getElementById('pill-' + id);
+  if (!dot) return;
+  dot.className  = 'status-dot ' + state;
+  meta.className = 'vocab-meta' + (state === 'error' ? ' error' : '');
+  meta.textContent = metaText;
+  pill.className = 'vocab-pill' + (state === 'loaded' ? ' loaded' : state === 'error' ? ' error' : '');
+}
+
+async function loadVocab(key) {
+  setVocabStatus(key, 'loading', 'Loading…');
+  try {
+    const res = await fetch(VOCABS[key].url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    vocabs[key] = buildVocabState(json);
+    const v = vocabs[key];
+    setVocabStatus(key, 'loaded',
+      `${v.ptName} · ${v.vocabSize.toLocaleString()} tokens · ${v.mergeCount.toLocaleString()} merges`);
+  } catch (e) {
+    vocabs[key] = 'error';
+    setVocabStatus(key, 'error', e.message);
+  }
+  render();
+}
+
+// ─────────────────────────────────────────────────────────
+//  Rendering
+// ─────────────────────────────────────────────────────────
+function makeChip(tok, idx, cls, id) {
+  const el = document.createElement('span');
+  el.className = cls;
+  el.style.animationDelay = `${Math.min(idx * 10, 500)}ms`;
+  if (tok === '\u0120') {
+    const s = document.createElement('span'); s.className = 'space-mark'; s.textContent = 'Ġ';
+    el.appendChild(s);
+  } else if (tok.startsWith('\u0120')) {
+    const s = document.createElement('span'); s.className = 'space-mark'; s.textContent = 'Ġ';
+    el.appendChild(s);
+    el.appendChild(document.createTextNode(tok.slice(1)));
+  } else { el.textContent = tok; }
+  if (id !== undefined) {
+    const idEl = document.createElement('span'); idEl.className = 'tok-id'; idEl.textContent = id;
+    el.appendChild(idEl); el.title = `"${tok}"  id=${id}`;
+  } else {
+    const cps = [...tok].map(c => 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')).join(' ');
+    el.title = `"${tok}" · ${cps}`;
+  }
+  return el;
+}
+
+function fillStream(container, items, cls, showIds) {
+  container.innerHTML = '';
+  if (!items || !items.length) {
+    container.innerHTML = '<span class="empty-hint">Type something above…</span>'; return;
+  }
+  items.forEach((item, i) => {
+    const tok = typeof item === 'string' ? item : item.token;
+    const id  = showIds && typeof item === 'object' ? item.id : undefined;
+    container.appendChild(makeChip(tok, i, cls, id));
+  });
+}
+
+function vocabReady(key) { return vocabs[key] && vocabs[key] !== 'error'; }
+
+function makeCopyAllBtn(items) {
+  const btn = document.createElement('button');
+  btn.className = 'copy-all-btn';
+  btn.textContent = 'copy [ ]';
+  btn.title = 'Copy all tokens as JSON array';
+  btn.addEventListener('click', () => {
+    const arr = items.map(item => typeof item === 'string' ? item : item.token);
+    navigator.clipboard.writeText(JSON.stringify(arr)).then(() => {
+      btn.textContent = '✓ copied';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'copy [ ]'; btn.classList.remove('copied'); }, 1500);
+    });
+  });
+  return btn;
+}
+
+function makePanelEl(titleHtml, dotCls, badgesHtml, bodyHtml, subHtml) {
+  const p = document.createElement('div'); p.className = 'panel';
+  p.innerHTML = `
+    <div class="panel-header">
+      <span class="panel-title"><span class="panel-dot ${dotCls}"></span>${titleHtml}</span>
+      <span class="panel-badges">${badgesHtml}</span>
+    </div>
+    <div class="panel-body">${bodyHtml}</div>
+    ${subHtml ? `<div class="panel-sub">${subHtml}</div>` : ''}`;
+  return p;
+}
+
+function renderBpeView(text, el) {
+  const entries = [
+    { key: 'sin_eng',      dotCls: '',     streamId: 'bpe-sin-eng',      preId: 'pre-sin-eng' },
+    { key: 'sin_eng_gpt2', dotCls: 'gold', streamId: 'bpe-sin-eng-gpt2', preId: 'pre-sin-eng-gpt2' },
+  ];
+  for (const { key, dotCls, streamId, preId } of entries) {
+    const vocab  = vocabReady(key) ? vocabs[key] : null;
+    const ptName = vocab ? vocab.ptName : (key === 'sin_eng_gpt2' ? 'GPT2PreTokenizer' : 'GraphemePreTokenizer');
+    const preSym = preSymbols(text, ptName);
+    const bpeTok = vocab ? encode(text, vocab) : null;
+
+    const bodyHtml = bpeTok
+      ? `<div class="token-stream" id="${streamId}"></div>`
+      : `<div class="loading-hint"><span class="status-dot ${vocabs[key] === 'error' ? 'error' : 'loading'}"></span>${vocabs[key] === 'error' ? 'Vocab failed to load' : 'Loading vocab…'}</div>`;
+
+    const badges = [
+      bpeTok ? `<span class="badge">tokens: <b>${bpeTok.length}</b></span>` : '',
+      vocab  ? `<span class="badge">vocab: <b>${vocab.vocabSize.toLocaleString()}</b></span>` : '',
+    ].join('');
+
+    const subHtml = `
+      <div class="panel-sub-label">base symbols · pre-tokenize only <span class="badge" style="margin-left:4px">${preSym.length}</span></div>
+      <div class="token-stream" id="${preId}"></div>`;
+
+    el.appendChild(makePanelEl(`${key} · ${ptName}`, dotCls, badges, bodyHtml, subHtml));
+    if (bpeTok) {
+      fillStream(document.getElementById(streamId), bpeTok, 'token', true);
+      // inject copy-all button into panel badges
+      const badgesEl = el.lastChild.querySelector('.panel-badges');
+      if (badgesEl) badgesEl.appendChild(makeCopyAllBtn(bpeTok));
+    }
+    fillStream(document.getElementById(preId), preSym, 'pretoken', false);
+  }
+}
+
+function renderPreView(text, el) {
+  const entries = [
+    { dotCls: '',     ptName: 'GraphemePreTokenizer', streamId: 'pre2-sin-eng' },
+    { dotCls: 'gold', ptName: 'GPT2PreTokenizer',     streamId: 'pre2-gpt2' },
+  ];
+  for (const { dotCls, ptName, streamId } of entries) {
+    const syms = preSymbols(text, ptName);
+    const panel = makePanelEl(ptName, dotCls,
+      `<span class="badge">tokens: <b>${syms.length}</b></span>`,
+      `<div class="token-stream" id="${streamId}"></div>`, null);
+    el.appendChild(panel);
+    fillStream(document.getElementById(streamId), syms, 'token', false);
+  }
+}
+
+function renderCompareView(text, el) {
+  const v1 = vocabReady('sin_eng')      ? vocabs['sin_eng']      : null;
+  const v2 = vocabReady('sin_eng_gpt2') ? vocabs['sin_eng_gpt2'] : null;
+  const pre1 = preSymbols(text, 'GraphemePreTokenizer');
+  const pre2 = preSymbols(text, 'GPT2PreTokenizer');
+  const bpe1 = v1 ? encode(text, v1) : null;
+  const bpe2 = v2 ? encode(text, v2) : null;
+  const cpCount = [...text].length;
+
+  function cell(val, better) {
+    if (val === null) return `<td style="color:var(--clay);font-style:italic">loading…</td>`;
+    return `<td class="${better ? 'better' : ''}">${val}</td>`;
+  }
+
+  const panel = document.createElement('div'); panel.className = 'panel';
+  panel.innerHTML = `
+    <div class="panel-header">
+      <span class="panel-title"><span class="panel-dot clay"></span>Tokenizer comparison</span>
+    </div>
+    <div class="panel-body" style="padding:0">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th><span class="panel-dot" style="display:inline-block;margin-right:6px;vertical-align:middle"></span>sin_eng</th>
+            <th><span class="panel-dot gold" style="display:inline-block;margin-right:6px;vertical-align:middle"></span>sin_eng_gpt2</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="rl">Pre-token count</td>
+            ${cell(pre1.length, pre1.length <= pre2.length)}
+            ${cell(pre2.length, pre2.length < pre1.length)}</tr>
+          <tr><td class="rl">BPE token count</td>
+            ${cell(bpe1 ? bpe1.length : null, bpe1 && bpe2 && bpe1.length <= bpe2.length)}
+            ${cell(bpe2 ? bpe2.length : null, bpe1 && bpe2 && bpe2.length < bpe1.length)}</tr>
+          <tr><td class="rl">Compression vs pre-tokens</td>
+            ${cell(bpe1 ? ((1 - bpe1.length / pre1.length) * 100).toFixed(1) + '%' : null, false)}
+            ${cell(bpe2 ? ((1 - bpe2.length / pre2.length) * 100).toFixed(1) + '%' : null, false)}</tr>
+          <tr><td class="rl">Codepoints / pre-token</td>
+            <td>${(cpCount / pre1.length).toFixed(2)}</td>
+            <td>${(cpCount / pre2.length).toFixed(2)}</td></tr>
+          <tr><td class="rl">Base unit</td>
+            <td>Grapheme cluster</td><td>Unicode codepoint</td></tr>
+          <tr><td class="rl">Sinhala-aware</td>
+            <td style="color:var(--rust);font-weight:500">✓ yes</td>
+            <td style="color:var(--clay)">✗ no</td></tr>
+        </tbody>
+      </table>
+    </div>`;
+  el.appendChild(panel);
+}
+
+// ─────────────────────────────────────────────────────────
+//  Main loop + events
+// ─────────────────────────────────────────────────────────
+let mode = 'bpe';
+
+function render() {
+  const text = document.getElementById('inputText').value;
+  const el   = document.getElementById('results');
+  el.innerHTML = '';
+  if (!text.trim()) {
+    el.innerHTML = '<span class="empty-hint" style="display:block;padding:4px 0">Type something above…</span>';
+    return;
+  }
+  if (mode === 'bpe')     renderBpeView(text, el);
+  if (mode === 'pre')     renderPreView(text, el);
+  if (mode === 'compare') renderCompareView(text, el);
+}
+
+document.getElementById('inputText').addEventListener('input', render);
+
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active'); mode = btn.dataset.mode; render();
+  });
+});
+
+document.querySelectorAll('.sample-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('inputText').value = btn.dataset.text; render();
+  });
+});
+
+Promise.all(Object.keys(VOCABS).map(loadVocab));
+
+// Fetch version from pyproject.toml
+async function loadVersion() {
+  try {
+    const res = await fetch('https://raw.githubusercontent.com/akuruAI/akuru-token/main/pyproject.toml');
+    if (!res.ok) throw new Error();
+    const text = await res.text();
+    const match = text.match(/^version\s*=\s*"([^"]+)"/m);
+    if (match) document.getElementById('pkg-version').textContent = 'v' + match[1];
+  } catch {
+    document.getElementById('pkg-version').textContent = '';
+  }
+}
+loadVersion();
+
+render();
+</script>
+</body>
+</html>
