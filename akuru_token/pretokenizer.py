@@ -172,19 +172,26 @@ class GraphemePreTokenizer(BasePreTokenizer):
 
     Word splitting
     ~~~~~~~~~~~~~~
-    Splits on whitespace runs, attaching a leading Ġ (U+0120) space marker to
-    each non-first word so the model is space-aware.
+    Splits on all whitespace, with different treatment for spaces vs non-space
+    whitespace (newlines, tabs, etc.):
+
+    - **Spaces** attach as Ġ (U+0120) prefix to the following word. Multiple
+      consecutive spaces produce standalone Ġ tokens for all but the last,
+      which attaches to the next word.
+    - **Non-space whitespace** (\\n, \\t, \\r, etc.) acts as a hard boundary.
+      Runs of non-space whitespace are emitted as a single standalone token
+      so BPE can learn merges like ``\\n\\n`` within the run, but never across
+      into adjacent text.
 
     This is intentionally simpler than the GPT-2 regex. The GPT-2 regex uses
     \\w which does NOT match Sinhala combining marks (Unicode category Mn/Mc),
     so vowel signs like ි, ා, ු would be split off as separate tokens before
-    BPE even runs - shredding grapheme clusters apart. Whitespace splitting
-    keeps every Sinhala word intact, including its vowel signs, virama, and
-    ZWJ conjuncts, ready for grapheme segmentation.
+    BPE even runs - shredding grapheme clusters apart.
 
-    After whitespace splitting, each chunk is further split on digit/non-digit
-    boundaries with numeric runs capped at 3 digits (the tiktoken approach). 
-    Punctuation is kept attached to its word (e.g. කිරිබත්,).
+    After whitespace splitting, each text chunk is further split on
+    digit/non-digit boundaries with numeric runs capped at 3 digits (the
+    tiktoken approach). Punctuation is kept attached to its word (e.g.
+    කිරිබත්,).
 
     Symbol splitting
     ~~~~~~~~~~~~~~~~
@@ -200,27 +207,47 @@ class GraphemePreTokenizer(BasePreTokenizer):
     from raw codepoints.
     """
 
-    _WHITESPACE = regex.compile(r" +")
+    _SEGMENT = regex.compile(r"[^\s]+|[ ]+|[^\S ]+")
     _NUMBER_SPLIT = regex.compile(r"\p{N}{1,3}|[^\p{N}]+")
 
     def __init__(self, normalize: bool = True) -> None:
         super().__init__(normalize=normalize)
 
     def pre_tokenize(self, text: str) -> List[str]:
-        parts = self._WHITESPACE.split(self._normalize(text))
-        tokens = []
-        for i, part in enumerate(parts):
-            if not part:
-                continue
-            subparts = self._NUMBER_SPLIT.findall(part)
-            for j, sub in enumerate(subparts):
-                if not sub:
-                    continue
-                # Attach the Ġ space marker only to the first sub-token
-                if i > 0 and j == 0:
-                    tokens.append("\u0120" + sub)
-                else:
-                    tokens.append(sub)
+        segments = self._SEGMENT.findall(self._normalize(text))
+        tokens: List[str] = []
+        pending_space = False  # next text word should get Ġ prefix
+
+        for seg in segments:
+            ch = seg[0]
+            if not ch.isspace():
+                # Apply number splitting
+                subparts = self._NUMBER_SPLIT.findall(seg)
+                for j, sub in enumerate(subparts):
+                    if not sub:
+                        continue
+                    if pending_space and j == 0:
+                        tokens.append("\u0120" + sub)
+                        pending_space = False
+                    else:
+                        tokens.append(sub)
+            elif ch == " ":
+                # Last space will attach to next text word,
+                # remaining spaces become standalone Ġ tokens.
+                for _ in range(len(seg) - 1):
+                    tokens.append("\u0120")
+                pending_space = True
+            else:
+                # Non-space whitespace run (\n, \t, \r, etc.) - boundary.
+                # Flush any pending space as standalone Ġ first.
+                if pending_space:
+                    tokens.append("\u0120")
+                    pending_space = False
+                tokens.append(seg)
+
+        if pending_space:
+            tokens.append("\u0120")
+
         return tokens
 
     def word_to_symbols(self, word: str) -> List[str]:

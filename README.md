@@ -68,9 +68,27 @@ Use `BPETrainer` with any pre-tokenizer and an iterable of strings. See [`script
 | `GPT2PreTokenizer` | GPT-2 regex | Codepoints | English, Latin-script |
 | `WhitespacePreTokenizer` | Whitespace | Codepoints | Simple / reference use |
 
-The digit-boundary split in `GraphemePreTokenizer` caps numeric runs to 3 digits, following the [`\p{N}{1,3}` split pattern](https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py) in tiktoken's `cl100k_base` encoding. Without this, a number like `2024` is a single pre-tokenization unit, and if it is frequent enough in the corpus BPE will eventually merge its digits into a single token - one that is useless for encoding any other number. With the cap, `2024` pre-splits as `["202", "4"]` before BPE runs, so no digit token longer than 3 digits can ever form regardless of how often it appears in training data.
-
 The pre-tokenizer is recorded in the vocab JSON and resolved automatically on load - you never need to specify it manually.
+
+### Whitespace boundaries
+
+`GraphemePreTokenizer` splits on all whitespace, with different treatment for spaces and non-space whitespace:
+
+- **Spaces** attach as `Ġ` (U+0120) prefix to the following word. Multiple consecutive spaces produce standalone `Ġ` tokens for all but the last, which attaches to the next word.
+- **Non-space whitespace** (`\n`, `\t`, `\r`, etc.) acts as a hard boundary. Consecutive runs are grouped into a single standalone token so BPE can learn merges like `\n\n` within the run, but never across into adjacent text.
+
+```
+"a \n real"  → ['a', 'Ġ', '\n', 'Ġreal']
+"a\nreal"    → ['a', '\n', 'real']
+"a\n\nreal"  → ['a', '\n\n', 'real']
+"a\t real"   → ['a', '\t', 'Ġreal']
+```
+
+This ensures whitespace characters that carry semantic meaning (paragraph breaks, indentation) are preserved faithfully as standalone tokens, following the same principle as LLaMA/SentencePiece (`\n` and `\n\n` as distinct tokens) and tiktoken (explicit `\s*[\r\n]` boundary in the regex).
+
+### Digit boundary splitting
+
+The digit-boundary split caps numeric runs to 3 digits, following the [`\p{N}{1,3}` split pattern](https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py) in tiktoken's `cl100k_base` encoding. Without this, a number like `2024` is a single pre-tokenization unit, and if it is frequent enough in the corpus BPE will eventually merge its digits into a single token - one that is useless for encoding any other number. With the cap, `2024` pre-splits as `["202", "4"]` before BPE runs, so no digit token longer than 3 digits can ever form regardless of how often it appears in training data.
 
 ## Vocab format
 

@@ -123,6 +123,56 @@ class TestGraphemePreTokenizer:
         words = self.pt.pre_tokenize("hello ලංකාව")
         assert any("\u0120" in w for w in words[1:])
 
+    # -- Whitespace boundary handling --
+
+    def test_newline_is_standalone_boundary(self):
+        assert self.pt.pre_tokenize("a\nreal") == ["a", "\n", "real"]
+
+    def test_space_before_newline_becomes_standalone_g(self):
+        assert self.pt.pre_tokenize("a \n real") == ["a", "\u0120", "\n", "\u0120real"]
+
+    def test_double_newline_grouped(self):
+        assert self.pt.pre_tokenize("a\n\nreal") == ["a", "\n\n", "real"]
+
+    def test_triple_newline_grouped(self):
+        assert self.pt.pre_tokenize("a\n\n\nreal") == ["a", "\n\n\n", "real"]
+
+    def test_tab_is_standalone_boundary(self):
+        assert self.pt.pre_tokenize("a\treal") == ["a", "\t", "real"]
+
+    def test_tab_then_space(self):
+        assert self.pt.pre_tokenize("a\t real") == ["a", "\t", "\u0120real"]
+
+    def test_multi_space_around_newline(self):
+        result = self.pt.pre_tokenize("a  \n  real")
+        assert result == ["a", "\u0120", "\u0120", "\n", "\u0120", "\u0120real"]
+
+    def test_space_before_double_newline(self):
+        result = self.pt.pre_tokenize("a \n\n real")
+        assert result == ["a", "\u0120", "\n\n", "\u0120real"]
+
+    def test_trailing_space(self):
+        result = self.pt.pre_tokenize("trailing space ")
+        assert result == ["trailing", "\u0120space", "\u0120"]
+
+    def test_trailing_newline(self):
+        result = self.pt.pre_tokenize("hello\n")
+        assert result == ["hello", "\n"]
+
+    def test_leading_newline(self):
+        result = self.pt.pre_tokenize("\nhello")
+        assert result == ["\n", "hello"]
+
+    def test_only_newlines(self):
+        result = self.pt.pre_tokenize("\n\n\n")
+        assert result == ["\n\n\n"]
+
+    def test_simple_space_unchanged(self):
+        assert self.pt.pre_tokenize("hello world") == ["hello", "\u0120world"]
+
+    def test_double_space(self):
+        assert self.pt.pre_tokenize("hello  world") == ["hello", "\u0120", "\u0120world"]
+
 
 class TestNFCNormalization:
     """
@@ -209,7 +259,7 @@ class TestNFCNormalization:
         assert tok.pre_tokenizer.normalize is False
 
     def test_nfd_input_encodes_same_ids_as_nfc(self):
-        # End-to-end: train on NFC, encode NFD — must produce identical ids.
+        # End-to-end: train on NFC, encode NFD - must produce identical ids.
         corpus = ["caf\u00e9 au lait", "caf\u00e9 noir"]
         trainer = BPETrainer(
             vocab_size=200,
