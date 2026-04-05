@@ -58,6 +58,13 @@ tok.encode("ආයුබෝවන්", as_ids=False)
 # ['<bos>', 'ආයු', 'බෝ', 'වන්', '<eos>']
 ```
 
+#### Unknown grapheme fallback:
+
+By default, grapheme clusters not seen during training are decomposed into codepoints so that existing BPE merges can still apply, avoiding unnecessary `<unk>` tokens. Disable with `unk_fallback=False`:
+
+```python
+tok = BPETokenizer.from_file("sin_eng", unk_fallback=False)
+```
 
 ## Pre-tokenizers
 

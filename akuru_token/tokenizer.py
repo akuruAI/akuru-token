@@ -52,6 +52,11 @@ class BPETokenizer:
         correct pre-tokenizer is resolved automatically.
     add_bos / add_eos:
         Automatically prepend / append BOS or EOS token ids.
+    unk_fallback:
+        When True (default), unknown grapheme clusters are decomposed into
+        codepoints before BPE so that existing merges can still apply,
+        avoiding unnecessary ``<unk>`` tokens.  Set to False to disable
+        this fallback (unknown clusters map straight to ``<unk>``).
     """
 
     def __init__(
@@ -60,6 +65,7 @@ class BPETokenizer:
         pre_tokenizer: Optional[BasePreTokenizer] = None,
         add_bos: bool = False,
         add_eos: bool = False,
+        unk_fallback: bool = True,
     ) -> None:
         self.vocab = vocab
         self.pre_tokenizer: BasePreTokenizer = (
@@ -67,6 +73,7 @@ class BPETokenizer:
         )
         self.add_bos = add_bos
         self.add_eos = add_eos
+        self.unk_fallback = unk_fallback
 
         # Build a fast lookup: (a, b) -> merge rank
         self._merge_rank: Dict[Tuple[str, str], int] = {
@@ -98,12 +105,11 @@ class BPETokenizer:
         if as_ids:
             unk_id = self.vocab.unk_id
             return [self.vocab.token_to_id(t) or unk_id for t in tokens]
-        return tokens
+        return [t if t in self.vocab else self.vocab.SPECIAL_UNK for t in tokens]
 
     def encode_batch(self, texts: List[str], as_ids: bool = True) -> List[List]:
         """Encode a list of strings."""
         return [self.encode(t, as_ids=as_ids) for t in texts]
-
 
     def decode(self, ids: List[int], skip_special_tokens: bool = True) -> str:
         """
@@ -151,6 +157,7 @@ class BPETokenizer:
         path: str | Path,
         add_bos: bool = False,
         add_eos: bool = False,
+        unk_fallback: bool = True,
     ) -> "BPETokenizer":
         """
         Load a tokenizer from a vocab JSON file.
@@ -158,7 +165,7 @@ class BPETokenizer:
         The pre-tokenizer is resolved automatically from the vocab file.
         """
         vocab = Vocab.load(path)
-        return cls(vocab, add_bos=add_bos, add_eos=add_eos)
+        return cls(vocab, add_bos=add_bos, add_eos=add_eos, unk_fallback=unk_fallback)
 
     @property
     def vocab_size(self) -> int:
@@ -170,6 +177,17 @@ class BPETokenizer:
             return []
 
         symbols: List[str] = self.pre_tokenizer.word_to_symbols(word)
+
+        if self.unk_fallback:
+            # Decompose unknown grapheme clusters into codepoints so BPE
+            # can merge what it knows instead of producing <unk>.
+            expanded: List[str] = []
+            for sym in symbols:
+                if sym in self.vocab:
+                    expanded.append(sym)
+                else:
+                    expanded.extend(list(sym))
+            symbols = expanded
 
         while len(symbols) > 1:
             # Find the lowest rank adjacent pair
@@ -189,4 +207,3 @@ class BPETokenizer:
             symbols = symbols[:best_idx] + [merged] + symbols[best_idx + 2 :]
 
         return symbols
-    

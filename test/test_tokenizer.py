@@ -17,7 +17,8 @@ from akuru_token.pretokenizer import (
 SINHALA_SENTENCE = (
     "ශ්‍රී දළදා මාලිගාව යනු බුදුරජාණන් වහන්සේගේ වම් දන්තධාතූන් වහන්සේ "
     "වර්තමානයේ තැන්පත් කර ඇති මාළිගාවයි. වර්තමාන දළදා මාළිගාව ශ්‍රී "
-    "ලංකාවේ මහනුවර නගරයේ පිහිටා ඇත."
+    "ලංකාවේ මහනුවර නගරයේ පිහිටා ඇත. "
+    "සම්මා සම්බුද්ධස්ස ‍ ්"  # to test unk_fallback
 )
 
 SINHALA_WORDS = SINHALA_SENTENCE.split()
@@ -171,7 +172,11 @@ class TestGraphemePreTokenizer:
         assert self.pt.pre_tokenize("hello world") == ["hello", "\u0120world"]
 
     def test_double_space(self):
-        assert self.pt.pre_tokenize("hello  world") == ["hello", "\u0120", "\u0120world"]
+        assert self.pt.pre_tokenize("hello  world") == [
+            "hello",
+            "\u0120",
+            "\u0120world",
+        ]
 
 
 class TestNFCNormalization:
@@ -458,4 +463,43 @@ class TestBPETokenizer:
         v.pretokenizer_name = "DoesNotExist"
         with pytest.raises(ValueError, match="Unknown pretokenizer"):
             BPETokenizer(v)
-            
+
+
+class TestUnkFallback:
+    """Tests for the unk_fallback codepoint-decomposition path in BPETokenizer._bpe."""
+
+    _UNKNOWN_CLUSTER = "ස‍්ස"  # This needs to change once we support touching letters
+
+    def test_unk_fallback_default_is_true(self, grapheme_vocab):
+        tok = BPETokenizer(grapheme_vocab)
+        assert tok.unk_fallback is True
+
+    def test_unknown_cluster_is_single_unk_without_fallback(self, grapheme_vocab):
+        # The whole grapheme cluster is not in the vocab -> one <unk> for the cluster.
+        tok = BPETokenizer(grapheme_vocab, unk_fallback=False)
+        tokens = tok.encode(self._UNKNOWN_CLUSTER, as_ids=False)
+        assert tokens[0] == grapheme_vocab.SPECIAL_UNK
+
+    def test_unknown_cluster_decomposes_and_recovers_known_codepoint(
+        self, grapheme_vocab
+    ):
+        # With fallback the cluster splits to ['ස', '\u200d', '්', 'ස'].
+        # So <unk> cannot exists there.
+        tok = BPETokenizer(grapheme_vocab, unk_fallback=True)
+        tokens = tok.encode(self._UNKNOWN_CLUSTER, as_ids=False)
+        assert  grapheme_vocab.SPECIAL_UNK not in tokens
+
+    def test_fallback_yields_more_tokens_than_no_fallback(self, grapheme_vocab):
+        tok_on = BPETokenizer(grapheme_vocab, unk_fallback=True)
+        tok_off = BPETokenizer(grapheme_vocab, unk_fallback=False)
+        assert len(tok_on.encode(self._UNKNOWN_CLUSTER)) > len(
+            tok_off.encode(self._UNKNOWN_CLUSTER)
+        )
+
+    def test_known_grapheme_identical_regardless_of_fallback(self, grapheme_vocab):
+        # Graphemes present in the vocab are never decomposed; the fallback branch
+        # is not entered, so both settings must produce the same output.
+        tok_on = BPETokenizer(grapheme_vocab, unk_fallback=True)
+        tok_off = BPETokenizer(grapheme_vocab, unk_fallback=False)
+        text = "ශ්‍රී ලංකාව"
+        assert tok_on.encode(text) == tok_off.encode(text)
