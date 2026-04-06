@@ -55,7 +55,7 @@ def build_samples(
 
             if not line_is_allowed(line):
                 before_lines.append(line)
-                after_lines.append("[DROPPED — foreign script]")
+                after_lines.append("[DROPPED - foreign script]")
                 stats["dropped"] += 1
                 continue
 
@@ -67,7 +67,7 @@ def build_samples(
                 start = max(0, invalid_idx-6)
                 end = min(len(fixed), invalid_idx+6)
                 after_lines.append(
-                    f"[DROPPED — invalid Sinhala syntax at {invalid_idx} after fixing. Error is around ({fixed[start:end]})]"
+                    f"[DROPPED - invalid Sinhala syntax at {invalid_idx} after fixing. Error is around ({fixed[start:end]})]"
                 )
                 stats["dropped"] += 1
                 continue
@@ -84,7 +84,7 @@ def build_samples(
 
             if not fragments:
                 before_lines.append(line)
-                after_lines.append("[DROPPED — too short after cleaning]")
+                after_lines.append("[DROPPED - too short after cleaning]")
                 stats["dropped"] += 1
                 continue
 
@@ -180,7 +180,7 @@ def main() -> None:
     print(f"  Changed : {stats['changed']}")
     print(f"  Dropped : {stats['dropped']}")
     print(f"\nDiff file: {out_path}")
-    print("Open in VS Code — it renders .diff files natively.")
+    print("Open in VS Code - it renders .diff files natively.")
 
 
 if __name__ == "__main__":
