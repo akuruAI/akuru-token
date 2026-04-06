@@ -6,7 +6,7 @@ A grapheme-aware BPE tokenizer for Sinhala and mixed Sinhala–English text.
 
 Most tokenizers split text into Unicode codepoints before applying BPE. In Sinhala, this shreds syllables: `කිරිබත්` becomes `['ක', 'ි', 'ර', 'ි', 'බ', 'ත', '්']` - seven atoms, none of which is a valid linguistic unit. akuru-token splits first into *grapheme clusters*, so the same word becomes `['කි', 'රි', 'බ', 'ත්']` - four syllabic units a native reader would recognise. BPE then learns syllables, morphemes, and word fragments rather than spending its merge budget reconstructing what should have been atomic from the start. 
 
-As [UAX #29](https://unicode.org/reports/tr29/) (Unicode grapheme clustering spec), excludes Sinhala ZWJ conjuncts, a post-processing step re-joins valid conjunct sequences, covering rakaransaya, yansaya, repaya, and chained conjuncts. Training data is filtered against [SLS 1134:2011](https://www.language.lk/download/sls1134/) to remove lines with invalid Sinhala syntax.
+As [UAX #29](https://unicode.org/reports/tr29/) (Unicode grapheme clustering spec), excludes Sinhala ZWJ conjuncts, a post-processing step re-joins valid conjunct sequences, covering rakaransaya, yansaya, repaya, and chained conjuncts. Training data is filtered against [SLS 1134:2011](https://helpcentre.lk/wp-content/uploads/2022/07/SLS-1134-2011.pdf) to remove lines with invalid Sinhala syntax.
 
 The current implementation focuses on Sinhala. Future versions aim to extend support to other abugida scripts (Tamil, Devanagari, Malayalam), where the same grapheme-cluster problem applies.
 
